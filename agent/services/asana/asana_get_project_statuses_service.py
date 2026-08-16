@@ -1,0 +1,26 @@
+"""Backs the `asana_get_project_statuses` custom tool. Checked directly against
+constants.py's project whitelist — a project carries its own gid.
+"""
+
+from agent.exceptions import AsanaApiError
+from agent.services.asana.asana_api_client_service import AsanaApiClientService
+from agent.services.asana.asana_gate_service import AsanaGateService
+
+
+class AsanaGetProjectStatusesService:
+    FIELDS = 'text,title,color,created_by.name,created_at'
+
+    def __init__(self):
+        self.client = AsanaApiClientService()
+        self.gate = AsanaGateService()
+
+    def get_project_statuses(self, project_gid):
+        if not self.gate.is_project_allowed(project_gid):
+            return {'error': f'Project {project_gid} is not whitelisted.'}
+        try:
+            return self.client.get(f'/projects/{project_gid}/project_statuses', {'opt_fields': self.FIELDS})
+        except AsanaApiError as error:
+            return {'error': str(error)}
+
+
+__all__ = ['AsanaGetProjectStatusesService']

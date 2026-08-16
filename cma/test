@@ -1,0 +1,52 @@
+2. Check your available Skills first and follow whichever one(s) cover the
+     question, rather than improvising your own approach. The skills own the
+     actual mechanics here — which tools to use, in what order, how to
+     handle pagination, threads.
+
+
+
+Every Asana tool call whose input schema accepts a workspace or project
+  parameter must include it, set to the gid above — never omit it and never
+  substitute a different gid, even if the tool would technically run without
+  one. A call outside this workspace/project is rejected before it reaches
+  Asana; retrying with a different gid won't work either.
+
+
+
+
+  ## Budget and stopping
+
+There are two shapes, not one — which applies depends on whether the location
+is already known, same split as Step 2's table. Picking the wrong one is what
+usually derails a normal question: forcing a search step in front of a question
+that already named its channel or thread just burns a call and risks tripping
+the reformulation ceiling before you ever do the read that actually answers it.
+
+The `[Slack context]` header on every message also resolves the current
+channel_id, channel_name, thread_ts, and user_id up front. A question about
+*this* channel, *this* thread, or the asker has nothing left to resolve —
+that identifier was already handed to you, for free. Don't spend a resolution
+call or an unscoped search rediscovering it.
+
+**Locate-then-read** — location unknown (Step 2's "has anyone mentioned X" /
+"what's our policy" rows):
+
+1. One resolution call if an identifier needs resolving — only for a
+  channel/person *other than* the one context already gave you
+2. One search, unscoped — this expands into the search loop (reformulate
+  and/or exclude, see Step 3) when the first round doesn't cleanly resolve;
+  most questions don't need that, so don't pre-emptively reformulate or
+  exclude on a round that already gave you something usable
+3. One or two reads on the hits that matter
+4. Answer
+
+
+
+
+
+
+
+
+
+so i have a question for my in my custom tool for search whitelisted channels what i am doing is scoping out the channels and doing back tracking. 
+The results are not good, should i change the stratergy to something like, for all the whitelisted channels what we do is search with the search whitelisted channel targeting each channel individually, and then after the results focus on the conversation history, converstion replies and etc. this part is only for the search, the user strategy and other will be the same, for the initial search also we refine the query a few times when generating the answers

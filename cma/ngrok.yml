@@ -1,0 +1,26 @@
+# ngrok agent config (schema v3), mounted read-only into the `ngrok` service
+# in docker-compose.yml at /etc/ngrok.yml, started with `ngrok start --all`.
+#
+# authtoken is deliberately not set here — it comes from the NGROK_AUTHTOKEN
+# env var on the container instead (ngrok's config file does not interpolate
+# env vars, so a literal token here would mean two places to keep in sync).
+#
+# Port below is a literal, not ${DJANGO_PORT} — this file is read by the
+# ngrok binary, not by docker-compose, so compose's env substitution does not
+# apply to it. If you change it from its .env.example default (8000), update
+# this line too.
+#
+# Only one endpoint now — slack-mcp-server moved to Railway (see
+# docker-compose.yml's comment) because the free ngrok plan's single bundled
+# hostname can't be shared across two endpoints without silently colliding.
+# This endpoint pins no `url:` (custom domain), so it gets a random
+# ngrok-assigned URL on every restart — read the actual URL back off
+# `docker compose logs ngrok` (or http://localhost:4040) each time.
+
+version: 3
+agent: {}
+
+endpoints:
+  - name: django
+    upstream:
+      url: host.docker.internal:8000

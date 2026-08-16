@@ -1,0 +1,23 @@
+# Claude Managed Agents environment definition.
+#
+# Apply once, then paste the returned ID into CMA_ENVIRONMENT_ID:
+#   ENV_ID=$(ant beta:environments create < cma/environment.yaml --transform id -r)
+#
+# Cloud rather than self-hosted: MCP tools execute at the MCP server and custom
+# tools execute in Django, so neither touches the sandbox. Only the built-in
+# toolset runs here, as a scratchpad. Self-hosting would mean operating an
+# EnvironmentWorker to host that scratchpad, and no credential lives in the
+# sandbox either way.
+#
+# networking is `limited` with no allowed_hosts, so the sandbox has no egress
+# at all — the only paths out are MCP calls and Django-executed custom tools.
+# allow_mcp_servers is mandatory: without it every MCP tool fails silently.
+
+name: slack-support-agent-env
+description: No-egress cloud sandbox for the Slack support agent.
+
+config:
+  type: cloud
+  networking:
+    type: limited
+    allow_mcp_servers: true

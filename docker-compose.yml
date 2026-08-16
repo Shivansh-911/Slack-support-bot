@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-slack_cma}
+      POSTGRES_USER: ${POSTGRES_USER:-slack_cma}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-slack_cma}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-slack_cma}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  # korotovsky/slack-mcp-server no longer runs here — it's deployed on Railway
+  # instead (a persistent host with its own public HTTPS domain), because
+  # ngrok's free plan grants exactly one ephemeral hostname per account
+  # ("Domains: 0" in its Usage & Limits page means zero *additional* slots
+  # beyond that one bundled one), and running both Django and this server as
+  # separate ngrok endpoints silently collided on that single hostname rather
+  # than erroring — confirmed via `curl localhost:4040/api/tunnels`, which
+  # showed both endpoints resolving to the identical public_url. See the
+  # Railway service for its env vars (SLACK_MCP_XOXB_TOKEN reusing
+  # SLACK_BOT_TOKEN, SLACK_MCP_API_KEY, SLACK_MCP_ENABLED_TOOLS,
+  # SLACK_MCP_HOST=0.0.0.0) and cma/agent.yaml's mcp_servers.slack.url for
+  # where its Railway domain goes. Run it with the image's default transport
+  # (`sse`, serving at `/sse`) — its `http` transport mode doesn't route
+  # anywhere in the current build (every path 404s, confirmed by testing).
+
+  # ngrok now carries only the django endpoint — dropping the second endpoint
+  # is what actually fixes the hostname collision above (there's only one
+  # endpoint left to claim the account's one bundled hostname).
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command: ["start", "--all", "--config", "/etc/ngrok.yml"]
+    volumes:
+      - ./cma/ngrok.yml:/etc/ngrok.yml:ro
+    ports:
+      - "${NGROK_WEB_PORT:-4040}:4040"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
+  pgadmin_data:

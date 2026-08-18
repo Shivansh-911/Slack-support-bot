@@ -17,12 +17,12 @@ import re
 
 from slack_bolt.response import BoltResponse
 from slack_sdk.errors import SlackApiError
-
+from agent.models.session import Session
 from slack.services.slack_event_dispatch_service import SlackEventDispatchService
 from slack.utils.slack_markdown_formatter import SlackMarkdownFormatter
 from agent.exceptions import SessionBusyError
 from agent.services.agent_run import AgentRunService
-from agent.services.slack_channel_name_resolver_service import SlackChannelNameResolverService
+from agent.services.slack.slack_channel_service import SlackChannelService
 
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,30 @@ class SlackEventListenerService:
             return
         self._post(client, channel_id, thread_ts, answer)
 
-    def handle_message(self, ack, event, client):
+    def handle_message(self, ack, event, client, body):
+        # print(event)
+        team_id = body.get('team_id')
+        channel_id = event.get('channel')
+        thread_ts = event.get('thread_ts') or event.get('ts')
+
+        session = Session.objects.find_by_thread(team_id, channel_id, thread_ts)
+
+        if session and session.cma_session_id: 
+            self._react(client, event)
+            channel_name = self._channel_name(channel_id)
+            user_id = event.get('user')
+            question = event.get('text')
+            agent_run_service = AgentRunService()
+            try:
+                answer = agent_run_service.handle_run(
+                    channel_id, channel_name, thread_ts, team_id, user_id, question
+                )
+            except SessionBusyError:
+                self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
+                return
+            self._post(client, channel_id, thread_ts, answer)
+
+
         ack()
 
     def acknowledge_unhandled_event(self, ack):
@@ -88,11 +111,12 @@ class SlackEventListenerService:
             # the same ts; Slack rejects the second one, which is harmless.
             logger.warning('Could not add reaction: %s', error)
 
+
     def _channel_name(self, channel_id):
-        resolved = SlackChannelNameResolverService().resolve(channel_id)
-        if not resolved or isinstance(resolved, dict):
+        if not channel_id:
             return channel_id
-        return resolved
+        mapping = SlackChannelService()._fetch_id_to_name()
+        return mapping.get(channel_id, channel_id)
 
     def _strip_question(self, text):
         return self.MENTION_PATTERN.sub('', text or '').strip()

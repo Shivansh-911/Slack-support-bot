@@ -11,14 +11,20 @@ from agent.exceptions import SessionBusyError
 from agent.models.session import Session
 from agent.services.anthropic_client_service import AnthropicClientService
 from agent.services.agent_session_create_service import AgentSessionCreateService
-from agent.services.agent_tool_gate_service import AgentToolGateService
-from agent.services.agent_custom_tool_service import AgentCustomToolService
+from agent.services.agent_mcp_tool_gate_service import AgentMcpToolGateService
+from agent.services.slack.agent_slack_custom_tool_service import AgentslackCustomToolService
+from agent.services.slack.slack_channel_service import SlackChannelService
+from agent.services.asana.agent_asana_custom_tool_service import AgentAsanaCustomToolService
 
 
 class AgentRunService:
     REQUIRES_ACTION = 'requires_action'
+    channel_mapping = None 
 
     def handle_run(self, channel_id, channel_name, thread_ts, team_id, user_id, question):
+        self.channel_mapping = SlackChannelService()._fetch_id_to_name()
+
+        print(self.channel_mapping)
 
         session = Session.objects.find_by_thread(team_id, channel_id, thread_ts)
         if session and session.status == Session.Status.RUNNING:
@@ -44,8 +50,7 @@ class AgentRunService:
             Session.objects.mark_idle(session)
 
     def _drive(self, client, session_id, channel_id, channel_name, thread_ts, user_id, question):
-        tool_gate = AgentToolGateService()
-        custom_tool_service = AgentCustomToolService()
+        tool_gate = AgentMcpToolGateService()
         texts = []
 
         with client.beta.sessions.events.stream(session_id) as stream:
@@ -62,7 +67,7 @@ class AgentRunService:
             })
 
             for event in stream:
-                reply = self._handle_event(event, texts, tool_gate, custom_tool_service)
+                reply = self._handle_event(event, texts, tool_gate)
                 if reply is not None:
                     self._send(client, session_id, reply)
                 if self._is_finished(event):
@@ -83,13 +88,18 @@ class AgentRunService:
         )
 
 
-    def _handle_event(self, event, texts, tool_gate, custom_tool_service):
+    def _handle_event(self, event, texts, tool_gate):
         if event.type == 'agent.message':
             texts.extend(self._text_blocks(event))
         elif event.type == 'agent.mcp_tool_use':
             return tool_gate.handle_mcp_tool_use(event)
         elif event.type == 'agent.custom_tool_use':
-            return custom_tool_service.handle_custom_tool_use(event)
+            asana_custom_tool_service = AgentAsanaCustomToolService()
+            if asana_custom_tool_service.handles(event.name):
+                return asana_custom_tool_service.handle_custom_tool_use(event)
+            slack_custom_tool_service = AgentslackCustomToolService()
+            if slack_custom_tool_service.handles(event.name):
+                return slack_custom_tool_service.handle_custom_tool_use(event, self.channel_mapping)
         return None
 
     def _is_finished(self, event):

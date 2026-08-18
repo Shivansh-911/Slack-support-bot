@@ -43,10 +43,6 @@ tools:
         enabled: true
         permission_policy:
           type: always_ask
-      - name: channels_list
-        enabled: true
-        permission_policy:
-          type: always_ask
       - name: conversations_unreads
         enabled: true
         permission_policy:
@@ -63,271 +59,180 @@ tools:
         enabled: true
         permission_policy:
           type: always_ask
-      # Read-only (fetches file content, no mutation), but the server itself
-      # also gates this behind SLACK_MCP_ATTACHMENT_TOOL — enabling it here
-      # doesn't do anything unless that env var is set on the Railway deploy.
-      - name: attachment_get_data
-        enabled: false
-        permission_policy:
-          type: always_ask
 
-      # --- Read-only, but explicitly denied anyway: duplicates our custom
-      #     `search_whitelisted_channels` tool below, which re-checks every
-      #     result against constants.WHITELISTED_CHANNELS. This raw MCP tool
-      #     has no such allowlist re-check, so it stays off even though it's
-      #     read-only. ---
-      - name: conversations_search_messages
-        enabled: false
-        permission_policy:
-          type: always_ask
 
-  # Custom tool: no MCP server runs this. The agent emits `agent.custom_tool_use`,
-  # the session goes idle, and AgentCustomToolService (agent_run.py's
-  # `_handle_event`) executes it and answers with `user.custom_tool_result` —
-  # there is no permission_policy field because there is no confirmation step;
-  # we're the ones running it. channel_ids/exclude_channel_ids are optional
-  # and mutually exclusive: omitting both searches every whitelisted channel
-  # (the default), channel_ids restricts to just those, and
-  # exclude_channel_ids searches every whitelisted channel except those —
-  # useful when the agent knows a channel's ID (it just dominated an unscoped
-  # search) but not the IDs of the other whitelisted channels it would
-  # otherwise need to list explicitly. Either way,
-  # SlackChannelSearchAssistantService checks every ID involved against
-  # constants.WHITELISTED_CHANNELS *before* ever calling Slack.
-  #
-  # This schema mirrors assistant.search.context
-  # (https://docs.slack.dev/reference/methods/assistant.search.context)
-  # parameter-for-parameter, with two deliberate deviations: `channel_types`
-  # is dropped in favor of `channel_ids`/`exclude_channel_ids` (our own
-  # allowlist-scoping mechanism, applied as `in:<#channel_id>` query
-  # modifiers OR'd together and then re-checked against every returned
-  # message afterward — that re-check, not the query text, is the real
-  # boundary), and `content_types` is accepted but forced to `['messages']`
-  # server-side regardless of what's passed in, because `files`/`channels`
-  # results carry no channel_id field to re-check against the allowlist the
-  # way messages are re-checked.
-  #
-  # AgentCustomToolService dispatches this tool name to
-  # SlackChannelSearchAssistantService (`assistant.search.context`-based).
-  # The older search.messages-based SlackChannelSearchService still exists
-  # but is no longer wired to anything as of 2026-08-13.
+
+  # - type: custom
+  #   name: search_whitelisted_channels
+  #   description: >-
+  #     Search Slack messages, with optional surrounding context, by free-text
+  #     query. By default searches across every channel this agent is
+  #     allowed to read. Pass channel_ids to restrict the search to one or
+  #     more specific channels (results are pooled across all of them, so one
+  #     busy channel won't crowd out the others). Pass exclude_channel_ids
+  #     instead when one particular channel keeps dominating results with
+  #     nothing relevant — e.g. two or more reformulated unscoped searches in a
+  #     row where the same channel supplies most or all hits and none are
+  #     on-topic — to search every other allowed channel without needing to
+  #     know their IDs. channel_ids and exclude_channel_ids are mutually
+  #     exclusive; passing both is rejected. Any channel_id outside this
+  #     agent's allowlist, in either list, causes the whole call to be
+  #     rejected before any Slack API call is made — try again with only
+  #     allowed channel_ids, or drop the invalid entry from exclude_channel_ids
+  #     and retry with the rest, rather than retrying unchanged. Supports
+  #     Slack's search modifiers (`from:`, `before:`, `after:`, etc.) except
+  #     `in:`, which is reserved for channel scoping and is applied
+  #     automatically from channel_ids/exclude_channel_ids.
+  #   input_schema:
+  #     type: object
+  #     properties:
+  #       channel_ids:
+  #         type: array
+  #         items:
+  #           type: string
+  #         description: >-
+  #           Optional. One or more Slack channel IDs to restrict the search
+  #           to (e.g. ["C0123456789", "C0987654321"]) — each must be one
+  #           this agent is allowed to read. When omitted, the search runs
+  #           across every whitelisted channel instead (the default). Mutually
+  #           exclusive with exclude_channel_ids.
+  #       exclude_channel_ids:
+  #         type: array
+  #         items:
+  #           type: string
+  #         description: >-
+  #           Optional. One or more Slack channel IDs to search every
+  #           whitelisted channel EXCEPT — use this to drop a channel that
+  #           keeps dominating results with irrelevant hits, without having to
+  #           name every other allowed channel. Each ID must be one this agent
+  #           is allowed to read. Mutually exclusive with channel_ids; if
+  #           excluding every whitelisted channel would leave nothing to
+  #           search, the call is rejected instead of silently returning
+  #           nothing.
+  #       query:
+  #         type: string
+  #         description: User prompt or free-text Slack search query.
+  #       action_token:
+  #         type: string
+  #         description: >-
+  #           Pass the action_token as received in a message event, if this
+  #           search is following up on one.
+  #       content_types:
+  #         type: array
+  #         items:
+  #           type: string
+  #           enum:
+  #             - messages
+  #         description: >-
+  #           Content types to include. Fixed to `messages` — `files` and
+  #           `channels` results have no channel_id to check against this
+  #           agent's allowlist, so they are not supported here.
+  #       include_bots:
+  #         type: boolean
+  #         description: Whether results should include bot messages.
+  #       include_deleted_users:
+  #         type: boolean
+  #         description: Whether to include messages from deleted users.
+  #       before:
+  #         type: integer
+  #         description: Unix timestamp filter — only return results before this time.
+  #       after:
+  #         type: integer
+  #         description: Unix timestamp filter — only return results after this time.
+  #       include_context_messages:
+  #         type: boolean
+  #         description: Whether to include the messages surrounding each main result.
+  #       cursor:
+  #         type: string
+  #         description: Pagination cursor from a previous call's next_cursor, to fetch the next page.
+  #       limit:
+  #         type: integer
+  #         description: Number of results to return, up to a max of 20.
+  #       sort:
+  #         type: string
+  #         enum:
+  #           - score
+  #           - timestamp
+  #         description: Field to sort results by.
+  #       sort_dir:
+  #         type: string
+  #         enum:
+  #           - asc
+  #           - desc
+  #         description: Sort direction.
+  #       include_message_blocks:
+  #         type: boolean
+  #         description: Whether to return Block Kit blocks for each message result.
+  #       highlight:
+  #         type: boolean
+  #         description: Whether to highlight the matched query terms in results.
+  #       term_clauses:
+  #         type: array
+  #         items:
+  #           type: object
+  #         description: >-
+  #           A list of term clauses. Returned results match every term
+  #           clause specified.
+  #       modifiers:
+  #         type: string
+  #         description: Modifiers in `modifier:value` format, affecting term_clauses.
+  #       include_archived_channels:
+  #         type: boolean
+  #         description: Whether to include archived channels in results.
+  #       disable_semantic_search:
+  #         type: boolean
+  #         description: When true, only keyword-based search is used (no semantic search).
+  #     required:
+  #       - query
+
+  # Custom tool: wraps `conversations.members` — the member user ID list for
+  # one conversation. Returns bare IDs only, no names; pair with
+  # get_user_profile to resolve any of them to a name.
   - type: custom
-    name: search_whitelisted_channels
+    name: list_conversation_members
     description: >-
-      Search Slack messages, with optional surrounding context, by free-text
-      query. By default searches across every channel this agent is
-      allowed to read. Pass channel_ids to restrict the search to one or
-      more specific channels (results are pooled across all of them, so one
-      busy channel won't crowd out the others). Pass exclude_channel_ids
-      instead when one particular channel keeps dominating results with
-      nothing relevant — e.g. two or more reformulated unscoped searches in a
-      row where the same channel supplies most or all hits and none are
-      on-topic — to search every other allowed channel without needing to
-      know their IDs. channel_ids and exclude_channel_ids are mutually
-      exclusive; passing both is rejected. Any channel_id outside this
-      agent's allowlist, in either list, causes the whole call to be
-      rejected before any Slack API call is made — try again with only
-      allowed channel_ids, or drop the invalid entry from exclude_channel_ids
-      and retry with the rest, rather than retrying unchanged. Supports
-      Slack's search modifiers (`from:`, `before:`, `after:`, etc.) except
-      `in:`, which is reserved for channel scoping and is applied
-      automatically from channel_ids/exclude_channel_ids.
-    input_schema:
-      type: object
-      properties:
-        channel_ids:
-          type: array
-          items:
-            type: string
-          description: >-
-            Optional. One or more Slack channel IDs to restrict the search
-            to (e.g. ["C0123456789", "C0987654321"]) — each must be one
-            this agent is allowed to read. When omitted, the search runs
-            across every whitelisted channel instead (the default). Mutually
-            exclusive with exclude_channel_ids.
-        exclude_channel_ids:
-          type: array
-          items:
-            type: string
-          description: >-
-            Optional. One or more Slack channel IDs to search every
-            whitelisted channel EXCEPT — use this to drop a channel that
-            keeps dominating results with irrelevant hits, without having to
-            name every other allowed channel. Each ID must be one this agent
-            is allowed to read. Mutually exclusive with channel_ids; if
-            excluding every whitelisted channel would leave nothing to
-            search, the call is rejected instead of silently returning
-            nothing.
-        query:
-          type: string
-          description: User prompt or free-text Slack search query.
-        action_token:
-          type: string
-          description: >-
-            Pass the action_token as received in a message event, if this
-            search is following up on one.
-        content_types:
-          type: array
-          items:
-            type: string
-            enum:
-              - messages
-          description: >-
-            Content types to include. Fixed to `messages` — `files` and
-            `channels` results have no channel_id to check against this
-            agent's allowlist, so they are not supported here.
-        include_bots:
-          type: boolean
-          description: Whether results should include bot messages.
-        include_deleted_users:
-          type: boolean
-          description: Whether to include messages from deleted users.
-        before:
-          type: integer
-          description: Unix timestamp filter — only return results before this time.
-        after:
-          type: integer
-          description: Unix timestamp filter — only return results after this time.
-        include_context_messages:
-          type: boolean
-          description: Whether to include the messages surrounding each main result.
-        cursor:
-          type: string
-          description: Pagination cursor from a previous call's next_cursor, to fetch the next page.
-        limit:
-          type: integer
-          description: Number of results to return, up to a max of 20.
-        sort:
-          type: string
-          enum:
-            - score
-            - timestamp
-          description: Field to sort results by.
-        sort_dir:
-          type: string
-          enum:
-            - asc
-            - desc
-          description: Sort direction.
-        include_message_blocks:
-          type: boolean
-          description: Whether to return Block Kit blocks for each message result.
-        highlight:
-          type: boolean
-          description: Whether to highlight the matched query terms in results.
-        term_clauses:
-          type: array
-          items:
-            type: object
-          description: >-
-            A list of term clauses. Returned results match every term
-            clause specified.
-        modifiers:
-          type: string
-          description: Modifiers in `modifier:value` format, affecting term_clauses.
-        include_archived_channels:
-          type: boolean
-          description: Whether to include archived channels in results.
-        disable_semantic_search:
-          type: boolean
-          description: When true, only keyword-based search is used (no semantic search).
-      required:
-        - query
-
-  # Custom tools backing name resolution: `users_search` (the MCP tool above)
-  # is exact-substring-only against name/real_name/display_name/email, and
-  # hard-requires a non-empty query — no way to enumerate everyone through it.
-  # These two exist for what that tool can't do: SlackUserSearchAssistantService
-  # (Django) keeps its own `users.list`-backed directory cache, tried as an
-  # exact substring match first (same semantics as users_search) and only
-  # falling back to fuzzy/typo-tolerant matching when that comes back empty —
-  # so a misspelling or short form that isn't literally a substring of anyone's
-  # profile still has a chance to resolve. The full directory is never handed
-  # to the agent, only the specific matches for its query, for the same reason
-  # `channels_list` isn't exposed as a raw enumeration tool.
-  #
-  # Requires the Slack token to have `users:read`, `users:read.email`, and
-  # `channels:read`/`groups:read` scopes (for `users.list` and
-  # `conversations.members` respectively) — if either 403s, these tools error
-  # out rather than silently returning nothing.
-  - type: custom
-    name: search_users_directory
-    description: >-
-      Search the workspace's user directory by name, handle, or email — the
-      fallback for when users_search returns nothing. Tries an exact
-      substring match first (same as users_search); if that finds nothing, it
-      retries with fuzzy/typo-tolerant matching, so a misspelling or a short
-      form that isn't a literal substring of anyone's profile still has a
-      chance to resolve (a nickname unrelated to the real name, like "Bob"
-      for "Robert", still won't — there is no nickname dictionary). Results
-      are tagged exact or fuzzy; treat fuzzy matches as tentative and confirm
-      with the user before acting on one if it matters who exactly they are.
-      Pass channel_id to also see whether each match is currently a member of
-      that channel — a disambiguation signal when a name matches more than
-      one person, not a filter; someone who left the channel still appears,
-      just flagged as not currently in it.
-    input_schema:
-      type: object
-      properties:
-        query:
-          type: string
-          description: Name, handle, or email fragment to search for.
-        channel_id:
-          type: string
-          description: >-
-            Optional. A whitelisted channel ID or name to check each match's
-            current membership against, for disambiguation. Rejected before
-            any Slack API call if it isn't one this agent is allowed to read.
-        limit:
-          type: integer
-          description: Maximum results to return, up to 10 (the default).
-      required:
-        - query
-
-  - type: custom
-    name: list_channel_members
-    description: >-
-      List the current members of one whitelisted channel, with real names
-      attached (not bare IDs) — closes the "who's in this channel" gap that
-      no other tool here answers. Membership is a point-in-time snapshot;
-      someone who left recently may still be relevant to older history in
-      that channel, so don't treat absence from this list as proof someone
-      never participated there.
+      List the member user IDs of a Slack conversation (channel). Returns
+      bare user IDs, not names — use get_user_profile on any ID you need to
+      show a name for.
     input_schema:
       type: object
       properties:
         channel_id:
           type: string
-          description: >-
-            A whitelisted channel ID or name. Rejected before any Slack API
-            call if it isn't one this agent is allowed to read.
+          description: The Slack channel ID whose members to list.
       required:
         - channel_id
 
-  # Resolves a whitelisted channel_id to its channel name. Most tool output
-  # already carries a channel name alongside any channel_id it returns (e.g.
-  # search_whitelisted_channels results), so this is only needed for the
-  # remaining cases that surface a bare ID — conversations_history/
-  # conversations_replies results, or a channel_id named in a tool
-  # confirmation denial. Every message the agent receives already carries the
-  # current channel's own name in its Slack context header (see system
-  # prompt below); this tool is for *other* channel_ids encountered mid-task.
+  # Custom tool: wraps `users.info` — a single user's profile by ID. The
+  # counterpart to list_conversation_members and to any other tool output
+  # (search results, conversation history) that surfaces a bare user_id.
   - type: custom
-    name: resolve_channel_name
+    name: get_user_profile
     description: >-
-      Resolve a whitelisted Slack channel ID to its channel name. Use this
-      when a tool result surfaces a channel_id that isn't already paired
-      with a name and you need the readable name to reference it in your
-      answer. Only resolves channel IDs on this agent's allowlist — any
-      other ID is rejected rather than resolved.
+      Fetch a single Slack user's profile (name, real name, display name,
+      email, bot flag) by user_id.
     input_schema:
       type: object
       properties:
-        channel_id:
+        user_id:
           type: string
-          description: The Slack channel ID to resolve to its channel name.
+          description: The Slack user ID to fetch the profile for.
       required:
-        - channel_id
+        - user_id
+
+  # Custom tool: lists every channel SlackChannelService knows about (its
+  # id-to-name cache, built from `conversations.list` via
+  # agent/services/slack/slack_channel_service.py). No whitelist filtering —
+  # see that file's docstring; allowlist scoping is being reworked elsewhere
+  # and isn't wired back in yet.
+  - type: custom
+    name: list_channels
+    description: >-
+      List every Slack channel this agent can see, with each channel's ID
+      and name.
+    input_schema:
+      type: object
+      properties: {}
 
   # The 18 read-only Asana tools below mirror roychri/mcp-server-asana's tool set
   # (https://github.com/roychri/mcp-server-asana) one-for-one by name and purpose, but
@@ -720,112 +625,117 @@ tools:
 #     version: latest
 
 skills:
+      # slack search first
     - type: custom
-      skill_id: skill_01Sy29s21dSE7CSLa8KNHGk1
+      skill_id: skill_01JbpeZxivNkrp9TgB6gpNnS
       version: latest
+      # asana skill
     - type: custom
       skill_id: skill_01LkxXWD9Ftota86BEj7uBby
       version: latest
+      # answering 
     - type: custom
-      skill_id: skill_01JbpeZxivNkrp9TgB6gpNnS
+      skill_id: skill_012j8tyCunh8etLjAqYXmMwz
       version: latest
 
 system: |
   You are a support agent for an engineering team. You answer questions
-  about Slack and Asana activity.
+  using Slack and Asana activity.
 
-  ## How to work
+  ## 1. Determine the sources
 
-  1. Read the question and figure out whether it's about Slack, Asana, or
-     both. If it's not obviously one or the other ("what's the status of X",
-     "did anyone mention Y"), treat it as both.
+  Classify the question as Slack, Asana, or both.
 
-  2. Check all the whitelisted channels and projects before generating the answer.
+  - Clearly Slack-related → use Slack.
+  - Clearly Asana-related → use Asana.
+  - Ambiguous questions such as "what's the status of X" or "did anyone
+    mention Y" → use both.
 
-  ## Message context
+  When both are relevant, research both and cross-reference the results.
+  If information from one source can improve the search in the other, use it.
 
-  Every message you receive starts with a `[Slack context]` header before the
-  actual question, e.g.:
+  Follow the corresponding Slack, Asana, and answering skills for all
+  retrieval and response-generation details.
+
+  ## 2. Slack context
+
+  Every message begins with:
 
     [Slack context]
-    channel_id: C0APS04G7DM
-    channel_name: eng-support
-    thread_ts: 1691999999.000100
-    user_id: U0123456789
+    channel_id: C...
+    channel_name: ...
+    thread_ts: ...
+    user_id: U...
 
-    <the question itself>
+    <question>
 
-  This is where the question came from, not part of the question — never
-  treat it as something the user typed.
+  This header is metadata and is NOT part of the user's question.
 
-  - channel_id / channel_name: the channel this question was asked in. This
-    name is already resolved — don't call a tool to look it up. This header
-    is attached to *every* message regardless of what the question is
-    about — its presence is not by itself a request to scope anything to
-    this channel, and treating it as one is a bug, not a safe default.
-    Only scope a search or a direct read to this channel_id when the
-    question text itself refers to the current channel — either by name,
-    or anaphorically ("this channel", "here", "in this channel", "from this
-    channel"). Otherwise — a bare topic question with no channel reference,
-    a question naming a *different* channel, or one that spans "all
-    channels"/"anywhere" — leave channel_id out entirely and search or read
-    unscoped across every whitelisted channel instead. When in doubt, treat
-    the question as unscoped: under-scoping costs a wider search, but
-    over-scoping to "this channel" silently drops every other whitelisted
-    channel's content from an answer that never asked to be narrowed.
+  - `channel_id` / `channel_name` identify where the question was asked.
+  - `thread_ts` identifies the current Slack thread.
+  - `user_id` identifies the person asking the question.
 
-    Examples: "what's the latest on the migration in this channel" →
-    scope to channel_id. "what's the latest on the migration" (same
-    channel, no reference to it) → unscoped, search every whitelisted
-    channel. "check #other-channel for X" → resolve and scope to that
-    *other* channel, not this one.
-  - thread_ts: the thread this conversation is happening in.
-  - user_id: the Slack ID of whoever sent *this* message — the authoritative
-    answer to "who is asking", never a name typed in the question text. When
-    a question is scoped to "me"/"my", resolve this ID to a name via
-    search_users_directory first, then use that name (Slack has no direct
-    identity link to Asana) to match against an assignee/reporter there.
+  The presence of this context does NOT automatically scope the question to
+  the current channel.
 
-  A channel_id you encounter elsewhere (search results, conversations_history
-  output, a tool-confirmation denial) is a *different* channel than the one
-  above — use the resolve_channel_name tool for those instead of guessing or
-  leaving a bare ID in your answer.
+  Scope to the current `channel_id` only when the question itself refers to
+  the current channel, for example:
+  - "this channel"
+  - "here"
+  - "in this channel"
+  - the current channel's name
 
-  ## Cross-referencing when both are in scope
+  Otherwise, leave the channel scope unrestricted.
 
-  When a question touches both Slack and Asana, run the two searches parallel 
-  after receiving the results form either service and if it is relevant to the 
-  question and the second result is breaking then use it to get better results 
-  for the other.Always do extensive research on the slack side for answers
+  If the question explicitly refers to another channel, use that channel
+  instead.
 
-  ## Whitelisted Channel id for slack
+  For questions referring to "me" or "my", treat the context `user_id` as
+  the authoritative identity of the requester. Resolve it through the Slack
+  skill before matching the person against Asana.
 
-    #C03EBMTEC14
-    #C09UT7G9XPT
-    #C0A1RSQ2BFU
-    #C04AZRNAW7L
+  ## 3. Slack whitelist
 
-  ## Whitelisted workspace/project gid for asana
+  There is no static Slack channel whitelist in this prompt.
 
-    workspace: 1203355867603831
-    project: 1211120697187537, 1216649926845343, 1213394818349982, 1211134942672045
+  Before the first Slack search/read in a conversation, call
+  `list_channels` once to obtain the current allowlisted channels.
 
-  
+  Reuse that result for the rest of the conversation.
 
-  ## Access
+  Do not search or read channels outside this allowlist.
 
-  You can only reach an allowlisted set of channels/projects. A refusal is a
-  boundary, not an error to work around — don't retry it or look for another
-  way in; tell the user plainly that it's out of scope.
+  ## 4. Asana whitelist
 
-  ## Answering
+  Only access the following Asana workspace/project:
 
-  Lead with the answer, then the evidence (linked messages/tasks). When the
-  answer draws on both sources, say so and show how they connect (e.g. "Slack
-  thread flagged this on Aug 10; the corresponding Asana task was closed
-  Aug 12"). If you can't find something, say so plainly instead of guessing.
-  When referencing a channel, use its channel name rather than a bare ID —
-  see "Message context" above for the current channel, and resolve_channel_name
-  for any other channel_id encountered along the way you can also use the resolve 
-  channel name custom tool to do that, before answering.
+    workspace_gid: 1203355867603831
+    project_gid: 1213906800178328
+
+  Every Asana operation must remain within this allowlist.
+
+  Asana is read-only. If the user asks to create, modify, complete, delete,
+  or comment on Asana data, explain that this agent can only read Asana.
+
+  ## 5. Access boundaries
+
+  The allowlists are hard boundaries.
+
+  If requested information is outside the allowed Slack channels or Asana
+  workspace/project, do not attempt another tool, source, or workaround to
+  bypass the restriction.
+
+  If a tool fails, do not interpret the failure as evidence that the data
+  does not exist. Report the limitation when it affects the answer.
+
+  ## 6. Research quality
+
+  For Slack questions, prefer thorough retrieval over stopping at the first
+  plausible result.
+
+  When the evidence does not support a confident answer, do not guess.
+  State that the available evidence is insufficient.
+
+  Follow the answering skill for the final response format and evidence
+  presentation.
 

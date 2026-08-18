@@ -21,36 +21,18 @@ from django.conf import settings
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from constants import WHITELISTED_CHANNELS
 
 
-class SlackChannelNameResolverService:
-    _id_to_name_cache = None
-
-    def resolve(self, channel_id):
-        """Returns channel_id's channel name, an {'error': ...} dict if it
-        isn't whitelisted, or None for falsy input.
-        """
-        if not channel_id:
-            return None
-        if channel_id not in WHITELISTED_CHANNELS:
-            return {'error': f'Channel {channel_id} is not whitelisted.'}
-        return self._id_to_name().get(channel_id, channel_id)
-
-    def _id_to_name(self):
-        if SlackChannelNameResolverService._id_to_name_cache is None:
-            SlackChannelNameResolverService._id_to_name_cache = self._fetch_id_to_name()
-        return SlackChannelNameResolverService._id_to_name_cache
+class SlackChannelService:
 
     def _fetch_id_to_name(self):
-        client = WebClient(token=settings.SLACK_USER_TOKEN)
+        client = WebClient(token=settings.SLACK_BOT_TOKEN)
         mapping = {}
         cursor = None
         try:
             while True:
-                response = client.conversations_list(
+                response = client.users_conversations(
                     types='public_channel,private_channel',
-                    exclude_archived=False,
                     limit=200,
                     cursor=cursor,
                 )
@@ -63,9 +45,6 @@ class SlackChannelNameResolverService:
                 if not cursor:
                     break
         except SlackApiError:
-            # Fail closed: whatever we'd already gathered still gets cached
-            # and used, but we don't retry mid-request — a channel that isn't
-            # in a partial mapping just falls back to its raw ID in resolve().
             pass
         return mapping
 

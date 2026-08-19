@@ -33,6 +33,10 @@ below).
    `asana_get_project_sections`, `asana_get_project_task_counts`, `asana_get_project_status`, or
    `asana_get_project_statuses`.
 
+There's exactly one workspace and project in scope for the whole session (set in the
+system prompt), so nothing here needs to search across or pick between projects/workspaces
+— every tool below already assumes that single target.
+
 ## Tool guide
 
 **`asana_get_tasks_for_project`** — every task in the whitelisted project, fully paginated. The
@@ -43,9 +47,6 @@ advanced search, which is **premium-only** and does not offset-paginate — resu
 and unstable-ordered. Always restricted to the whitelisted project(s) regardless of what's asked
 for. For "all tasks in the project" prefer `asana_get_tasks_for_project` instead; reach for this one
 for filtered/keyword queries.
-
-**`asana_search_projects`** — regex name match over a workspace's projects, scoped by
-`workspace_gid`. Results are filtered to whitelisted projects only.
 
 **`asana_get_my_tasks`** — the caller's own tasks, scoped by `workspace_gid`.
 
@@ -71,9 +72,6 @@ status gid and carries no project field — only call it on a status gid returne
 `workspace_gid` directly; the others take a bare `tag_gid`/`task_gid`, resolved to their governing
 workspace/project internally.
 
-**`asana_list_workspaces`** — lists workspaces, filtered to the whitelisted one(s) only. Rarely
-needed since the workspace is already fixed.
-
 No write tools exist here at all — not disabled-but-present, simply not implemented. If asked to
 create, update, complete, comment on, or otherwise modify anything in Asana, say plainly that you
 can only read it.
@@ -88,7 +86,5 @@ boundary, not an error — don't retry it, don't reach for another tool to route
 the user plainly that it's out of scope. The one gap is `asana_get_project_status` (see Strategy
 #4 and Tool guide above) — there is no code-level check for it, only the gid-provenance rule.
 
-## Answering
-
-Lead with the answer, then the evidence — link the specific tasks you relied on, with their
-`permalink_url` if the tool returned one. If nothing turns up, say so plainly rather than guessing.
+Hand off the raw evidence (task data, comments, `permalink_url`s) to the answering skill —
+it decides what surfaces and in what format; this skill's job stops at retrieval.

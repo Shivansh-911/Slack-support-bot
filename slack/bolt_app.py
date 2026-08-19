@@ -14,6 +14,5 @@ bolt_app = App(
     signing_secret=settings.SLACK_SIGNING_SECRET,
 )
 bolt_request_handler = SlackRequestHandler(bolt_app)
+# SlackRequestHandler — Bolt's Django adapter that translates a Django HttpRequest into Bolt's internal request/response cycle.
 
-
-__all__ = ['bolt_app', 'bolt_request_handler']

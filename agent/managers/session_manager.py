@@ -1,6 +1,7 @@
 """Provides database query and mutation operations for session records."""
 
 from django.db import models
+from django.utils import timezone
 
 
 class SessionManager(models.Manager):
@@ -20,16 +21,18 @@ class SessionManager(models.Manager):
             thread_ts=thread_ts,
             cma_session_id=cma_session_id,
             status=self.model.Status.RUNNING,
+            last_used_at=timezone.now(),
         )
 
     def mark_running(self, session):
         session.status = self.model.Status.RUNNING
-        session.save(update_fields=['status', 'updated_at'])
+        session.last_used_at = timezone.now()
+        session.save(update_fields=['status', 'last_used_at'])
         return session
 
     def mark_idle(self, session):
         session.status = self.model.Status.IDLE
-        session.save(update_fields=['status', 'updated_at'])
+        session.save(update_fields=['status'])
         return session
 
 

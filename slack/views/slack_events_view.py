@@ -19,4 +19,3 @@ class SlackEventsView(View):
         return bolt_request_handler.handle(request)
 
 
-__all__ = ['SlackEventsView']

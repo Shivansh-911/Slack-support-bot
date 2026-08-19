@@ -13,7 +13,7 @@ class SlackChannelMembersService:
     def members(self, channel_id):
         if not channel_id:
             return {'error': 'channel_id is required.'}
-        client = WebClient(token=settings.SLACK_BOT_TOKEN)
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
         member_ids = []
         cursor = None
         try:

@@ -26,7 +26,7 @@ from slack_sdk.errors import SlackApiError
 class SlackChannelService:
 
     def _fetch_id_to_name(self):
-        client = WebClient(token=settings.SLACK_BOT_TOKEN)
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
         mapping = {}
         cursor = None
         try:
@@ -40,6 +40,8 @@ class SlackChannelService:
                     name = channel.get('name')
                     channel_id = channel.get('id')
                     if name and channel_id:
+                        if channel_id == 'C0BJV4LF6N7':
+                            continue
                         mapping[channel_id] = name
                 cursor = response.get('response_metadata', {}).get('next_cursor')
                 if not cursor:
@@ -48,5 +50,13 @@ class SlackChannelService:
             pass
         return mapping
 
+    def get_channel_name(self, channel_id):
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
+        try:
+            response = client.conversations_info(channel=channel_id)
+            channel = response.get('channel')
+            return channel.get('name')
+        except SlackApiError:
+            pass
 
-__all__ = ['SlackChannelNameResolverService']
+

@@ -25,12 +25,12 @@ environ.Env.read_env(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-sfbxi#3vi!fhuyf8xwb$3y@c9t#b+oc8%=3-7+@3)&@ozq+%23'
+SECRET_KEY = env('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env.bool('DEBUG',default=True)
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '.ngrok-free.app', '.ngrok-free.dev'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
 
 
 # Application definition
@@ -43,8 +43,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'slack',
-    'agent',
+    'slack.apps.SlackConfig',
+    'agent.apps.AgentConfig',
 ]
 
 MIDDLEWARE = [
@@ -135,64 +135,21 @@ MAILERS = {
 # Slack
 # https://api.slack.com/authentication/verifying-requests-from-slack
 
-SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET', default='')
-
-# Bot token for calling the Slack Web API (e.g. from Bolt listeners via `say()`/`client`).
-# Left unset (None, not '') until a real token is configured — Bolt only calls Slack's
-# auth.test to verify the token at startup when one is actually present.
-SLACK_BOT_TOKEN = env('SLACK_BOT_TOKEN', default=None)
-
-# User token (xoxp). Required only by the agent's search tool: search.messages has no
-# bot-token equivalent, so it is the one Slack read that cannot use SLACK_BOT_TOKEN.
-SLACK_USER_TOKEN = env('SLACK_USER_TOKEN', default='')
+SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET')
+SLACK_BOT_TOKEN = env('SLACK_BOT_TOKEN')
+SLACK_USER_TOKEN = env('SLACK_USER_TOKEN')
 
 
 # Asana
 # https://developers.asana.com/docs/personal-access-token
-
-# Personal Access Token used by AsanaClientService to call Asana's REST API directly
-# from Django (custom tools, not MCP) — real network access, unlike the CMA sandbox's
-# skill scripts, which have no egress at all.
-ASANA_ACCESS_TOKEN = env('ASANA_ACCESS_TOKEN', default='')
-
-
-# Agent access policy
-#
-# Channel whitelisting is enforced via constants.WHITELISTED_CHANNELS (read by
-# AgentToolGateService and SlackChannelSearchService) rather than settings/env
-# — one list, in code, not duplicated here.
-
-# MCP tools the agent may call, mapped to the input field carrying the channel ID.
-# None means the tool takes no channel and needs no channel check. Anything absent from
-# this mapping is denied, so the tool names must match the deployed MCP server exactly —
-# these match korotovsky/slack-mcp-server (github.com/korotovsky/slack-mcp-server).
-#
-# Deliberately excluded: `channels_list`. Django can only approve or refuse an MCP call,
-# never filter its response, so a tool that enumerates channels would leak the names of
-# channels outside this whitelist even if every read of their content is denied. Also
-# excluded: `conversations_search_messages`, this server's own search tool — search is
-# served by the custom search tool instead, because channel scope lives inside its
-# free-text query and a binary allow/deny gate cannot narrow it. Restrict both of these
-# server-side too, via that server's SLACK_MCP_ENABLED_TOOLS, as defense in depth.
-AGENT_MCP_TOOL_ALLOWLIST = {
-    'conversations_history': 'channel_id',
-    'conversations_replies': 'channel_id',
-    'users_search': None,
-}
+ASANA_ACCESS_TOKEN = env('ASANA_ACCESS_TOKEN')
 
 
 # Claude Managed Agents
 # https://platform.claude.com/docs/en/managed-agents/overview
 
-ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
-
-# Created once with the `ant` CLI from cma/agent.yaml and cma/environment.yaml.
-CMA_AGENT_ID = env('CMA_AGENT_ID', default='')
-CMA_ENVIRONMENT_ID = env('CMA_ENVIRONMENT_ID', default='')
-
-# Holds the static bearer credential authenticating CMA to the self-hosted Slack MCP
-# server. Without it that server is reachable by anyone who learns its URL.
-CMA_VAULT_ID = env('CMA_VAULT_ID', default='')
-
-# Hard per-session spend cap, in US cents, so a runaway run cannot bill without bound.
+ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY')
+CMA_AGENT_ID = env('CMA_AGENT_ID')
+CMA_ENVIRONMENT_ID = env('CMA_ENVIRONMENT_ID')
+CMA_VAULT_ID = env('CMA_VAULT_ID')
 CMA_SESSION_BUDGET_CENTS = env.int('CMA_SESSION_BUDGET_CENTS', default=200)

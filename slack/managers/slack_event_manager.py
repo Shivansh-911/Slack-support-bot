@@ -18,5 +18,3 @@ class SlackEventManager(models.Manager):
             payload=payload,
         )
 
-
-__all__ = ['SlackEventManager']

@@ -8,4 +8,3 @@ class SessionBusyError(Exception):
         self.session = session
 
 
-__all__ = ['SessionBusyError']

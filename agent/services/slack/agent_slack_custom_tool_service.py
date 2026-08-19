@@ -32,12 +32,11 @@ class AgentslackCustomToolService:
         return self._handlers[event.name](event, channel_mapping)
 
     def _handle_search(self, event, channel_mapping):
-        _ = channel_mapping
         result = SlackChannelSearchAssistantService().search(
             query=event.input.get('query'),
             channel_ids=event.input.get('channel_ids'),
-            exclude_channel_ids=event.input.get('exclude_channel_ids'),
-            action_token=event.input.get('action_token'),
+            # exclude_channel_ids=event.input.get('exclude_channel_ids'),
+            # action_token=event.input.get('action_token'),
             include_bots=event.input.get('include_bots'),
             include_deleted_users=event.input.get('include_deleted_users'),
             before=event.input.get('before'),
@@ -47,11 +46,11 @@ class AgentslackCustomToolService:
             cursor=event.input.get('cursor'),
             sort=event.input.get('sort'),
             sort_dir=event.input.get('sort_dir'),
-            include_message_blocks=event.input.get('include_message_blocks'),
-            highlight=event.input.get('highlight'),
+            # include_message_blocks=event.input.get('include_message_blocks'),
+            # highlight=event.input.get('highlight'),
             term_clauses=event.input.get('term_clauses'),
             modifiers=event.input.get('modifiers'),
-            include_archived_channels=event.input.get('include_archived_channels'),
+            # include_archived_channels=event.input.get('include_archived_channels'),
             disable_semantic_search=event.input.get('disable_semantic_search'),
             channel_mapping=channel_mapping
         )
@@ -69,6 +68,7 @@ class AgentslackCustomToolService:
         mapping = SlackChannelService()._fetch_id_to_name()
         result = [{'channel_id': channel_id, 'name': name} for channel_id, name in mapping.items()]
         return self._reply(event, result)
+    
 
     def _reply(self, event, result):
         if isinstance(result, dict) and result.get('error'):

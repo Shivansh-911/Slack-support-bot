@@ -21,7 +21,7 @@ class AgentRunService:
     REQUIRES_ACTION = 'requires_action'
     channel_mapping = None 
 
-    def handle_run(self, channel_id, channel_name, thread_ts, team_id, user_id, question):
+    def handle_run(self, channel_id, thread_ts, team_id, user_id, question):
         self.channel_mapping = SlackChannelService()._fetch_id_to_name()
 
         print(self.channel_mapping)
@@ -44,12 +44,12 @@ class AgentRunService:
         try:
             Session.objects.mark_running(session)
             return self._drive(
-                client, session_id, channel_id, channel_name, thread_ts, user_id, question
+                client, session_id, channel_id, thread_ts, user_id, question
             )
         finally:
             Session.objects.mark_idle(session)
 
-    def _drive(self, client, session_id, channel_id, channel_name, thread_ts, user_id, question):
+    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question):
         tool_gate = AgentMcpToolGateService()
         texts = []
 
@@ -61,7 +61,7 @@ class AgentRunService:
                 "content": [{
                     "type": "text",
                     "text": self._context_message(
-                        channel_id, channel_name, thread_ts, user_id, question
+                        channel_id, thread_ts, user_id, question
                     ),
                 }],
             })
@@ -77,11 +77,11 @@ class AgentRunService:
     def _send(self, client, session_id, event):
         return client.beta.sessions.events.send(session_id, events=[event])
 
-    def _context_message(self, channel_id, channel_name, thread_ts, user_id, question):
+    def _context_message(self, channel_id, thread_ts, user_id, question):
         return (
             '[Slack context]\n'
             f'channel_id: {channel_id}\n'
-            f'channel_name: {channel_name}\n'
+            # f'channel_name: {channel_name}\n'
             f'thread_ts: {thread_ts}\n'
             f'user_id: {user_id}\n\n'
             f'{question}'
@@ -119,4 +119,3 @@ class AgentRunService:
 
 
 
-__all__ = ['AgentRunService']

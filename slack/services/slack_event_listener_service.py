@@ -12,6 +12,7 @@ Each listener method holds only that event type's behavior — Bolt routes to it
 by type instead of an `if event.get('type') == ...` branch.
 """
 
+from asyncio.locks import Event
 import logging
 import re
 
@@ -38,10 +39,6 @@ class SlackEventListenerService:
         bolt_app.middleware(self.archive_event)
         bolt_app.event('app_mention')(self.handle_app_mention)
         bolt_app.message()(self.handle_message)
-        # Falls through to here for any event type without a specific listener
-        # above. Without this, Bolt returns 404 for those (already archived by
-        # the middleware) events, which reads to Slack as a failed delivery and
-        # triggers retries.
         bolt_app.event(re.compile('.*'))(self.acknowledge_unhandled_event)
 
     def archive_event(self, body, next):
@@ -52,48 +49,57 @@ class SlackEventListenerService:
 
     def handle_app_mention(self, ack, event, client, body):
         ack()
+        
+
         self._react(client, event)
         team_id = body.get('team_id')
         channel_id = event.get('channel')
-        channel_name = self._channel_name(channel_id)
+        # channel_name = self._channel_name(channel_id)
         thread_ts = event.get('thread_ts') or event.get('ts')
         user_id = event.get('user')
         question = self._strip_question(event.get('text'))
         agent_run_service = AgentRunService()
         try:
             answer = agent_run_service.handle_run(
-                channel_id, channel_name, thread_ts, team_id, user_id, question
+                channel_id, 
+                # channel_name, 
+                thread_ts, 
+                team_id, 
+                user_id, 
+                question
             )
         except SessionBusyError:
             self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
             return
         self._post(client, channel_id, thread_ts, answer)
 
+
+
     def handle_message(self, ack, event, client, body):
-        # print(event)
+
+        ack()
+        
         team_id = body.get('team_id')
         channel_id = event.get('channel')
         thread_ts = event.get('thread_ts') or event.get('ts')
-
         session = Session.objects.find_by_thread(team_id, channel_id, thread_ts)
-
         if session and session.cma_session_id: 
             self._react(client, event)
-            channel_name = self._channel_name(channel_id)
+            # channel_name = self._channel_name(channel_id)
             user_id = event.get('user')
             question = event.get('text')
             agent_run_service = AgentRunService()
             try:
                 answer = agent_run_service.handle_run(
-                    channel_id, channel_name, thread_ts, team_id, user_id, question
+                    channel_id, thread_ts, team_id, user_id, question
                 )
             except SessionBusyError:
                 self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
                 return
             self._post(client, channel_id, thread_ts, answer)
+            # print(channel_name)
 
-
-        ack()
+        
 
     def acknowledge_unhandled_event(self, ack):
         ack()
@@ -101,22 +107,18 @@ class SlackEventListenerService:
     def _react(self, client, event):
         try:
             client.reactions_add(
-                channel=event['channel'],
-                timestamp=event['ts'],
+                channel=event.get('channel'),
+                timestamp=event.get('ts'),
                 name=self.REACTION_EMOJI,
             )
         except SlackApiError as error:
-            # e.g. already_reacted — a message that both mentions the bot and
-            # matches the plain-message listener gets two react attempts for
-            # the same ts; Slack rejects the second one, which is harmless.
             logger.warning('Could not add reaction: %s', error)
-
 
     def _channel_name(self, channel_id):
         if not channel_id:
             return channel_id
-        mapping = SlackChannelService()._fetch_id_to_name()
-        return mapping.get(channel_id, channel_id)
+        name = SlackChannelService().get_channel_name(channel_id)
+        return name
 
     def _strip_question(self, text):
         return self.MENTION_PATTERN.sub('', text or '').strip()

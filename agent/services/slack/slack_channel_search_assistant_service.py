@@ -20,14 +20,14 @@ class SlackChannelSearchAssistantService:
     CONTENT_TYPES = ["messages"]
 
     def __init__(self):
-        self.client = WebClient(token=settings.SLACK_BOT_TOKEN)
+        self.client = WebClient(token=settings.SLACK_USER_TOKEN)
 
     def search(
         self,
             query,
             channel_ids,
-            exclude_channel_ids,
-            action_token,
+            # exclude_channel_ids,
+            # action_token,
             include_bots,
             include_deleted_users,
             before,
@@ -37,20 +37,20 @@ class SlackChannelSearchAssistantService:
             cursor,
             sort,
             sort_dir,
-            include_message_blocks,
-            highlight,
+            # include_message_blocks,
+            # highlight,
             term_clauses,
             modifiers,
-            include_archived_channels,
+            # include_archived_channels,
             disable_semantic_search,
             channel_mapping
     ):
 
         _ = channel_ids
-        _ = exclude_channel_ids
+        # _ = exclude_channel_ids
 
         params = {
-            "query": self._scoped_query(query, channel_mapping, channel_ids, exclude_channel_ids),
+            "query": self._scoped_query(query, channel_mapping, channel_ids),
             "content_types": self.CONTENT_TYPES,
             "channel_types": [
                 "public_channel",
@@ -60,7 +60,7 @@ class SlackChannelSearchAssistantService:
         }
 
         optional_params = {
-            "action_token": action_token,
+            # "action_token": action_token,
             "include_bots": include_bots,
             "include_deleted_users": include_deleted_users,
             "before": before,
@@ -70,11 +70,11 @@ class SlackChannelSearchAssistantService:
             "cursor": cursor,
             "sort": sort,
             "sort_dir": sort_dir,
-            "include_message_blocks": include_message_blocks,
-            "highlight": highlight,
+            # "include_message_blocks": include_message_blocks,
+            # "highlight": highlight,
             "term_clauses": term_clauses,
             "modifiers": modifiers,
-            "include_archived_channels": include_archived_channels,
+            # "include_archived_channels": include_archived_channels,
             "disable_semantic_search": disable_semantic_search,
         }
 
@@ -95,16 +95,16 @@ class SlackChannelSearchAssistantService:
                 "error": error.response.get("error", str(error))
             }
 
-    def _scoped_query(self, query, channel_mapping, channel_ids, exclude_channel_ids):
+    def _scoped_query(self, query, channel_mapping, channel_ids):
         if channel_ids:
             channel_query = self.resolve_search_channels(channel_ids)
-        elif exclude_channel_ids:
-            scoped_mapping = {
-                channel_id: name
-                for channel_id, name in (channel_mapping or {}).items()
-                if channel_id not in exclude_channel_ids
-            }
-            channel_query = self.resolve_search_channels(scoped_mapping)
+        # elif exclude_channel_ids:
+        #     scoped_mapping = {
+        #         channel_id: name
+        #         for channel_id, name in (channel_mapping or {}).items()
+        #         if channel_id not in exclude_channel_ids
+        #     }
+        #     channel_query = self.resolve_search_channels(scoped_mapping)
         else:
             channel_query = self.resolve_search_channels(channel_mapping)
         if not channel_query:

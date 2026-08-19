@@ -10,7 +10,7 @@ class SlackUserProfileService:
     def get_user(self, user_id):
         if not user_id:
             return {'error': 'user_id is required.'}
-        client = WebClient(token=settings.SLACK_BOT_TOKEN)
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
         try:
             response = client.users_info(user=user_id)
         except SlackApiError as error:

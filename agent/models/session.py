@@ -17,9 +17,14 @@ class Session(models.Model):
     cma_session_id = models.CharField(max_length=128, blank=True, default='')
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.IDLE)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    last_used_at = models.DateTimeField()
 
     objects = SessionManager()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['team_id', 'channel_id', 'thread_ts'], name='session_thread_idx'),
+        ]
 
 
 __all__ = ['Session']

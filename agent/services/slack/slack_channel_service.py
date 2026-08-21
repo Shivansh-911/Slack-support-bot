@@ -38,11 +38,11 @@ class SlackChannelService:
                 )
                 for channel in response.get('channels', []):
                     name = channel.get('name')
-                    channel_id = channel.get('id')
-                    if name and channel_id:
-                        if channel_id == 'C0BJV4LF6N7':
+                    channel = channel.get('id')
+                    if name and channel:
+                        if channel == 'C0BJV4LF6N7':
                             continue
-                        mapping[channel_id] = name
+                        mapping[channel] = name
                 cursor = response.get('response_metadata', {}).get('next_cursor')
                 if not cursor:
                     break

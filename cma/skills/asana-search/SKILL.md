@@ -1,6 +1,6 @@
 ---
 name: asana-search
-description: Search Asana with the asana_* custom tools, always scoped to the whitelisted workspace/project. Use for anything Asana-related — "what's on my Asana list", "status of task X", "what's in project Y", an app.asana.com URL or gid. Read-only.
+description: Search Asana with the asana_* custom tools, always scoped to the whitelisted workspace/project. Use for anything Asana-related — "what's on my Asana list", "status of task X", "what's in project Y", an app.asana.com URL or gid — and also for any mention of a "ticket"/"support ticket"/"issue" or whether a Slack thread is "associated with"/"linked to"/"filed as" one, even when the same question also names a Slack channel. Read-only.
 ---
 
 # Asana Search

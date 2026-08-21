@@ -30,10 +30,14 @@ class SessionManager(models.Manager):
         session.save(update_fields=['status', 'last_used_at'])
         return session
 
-    def mark_idle(self, session):
-        session.status = self.model.Status.IDLE
-        session.save(update_fields=['status'])
-        return session
 
+    def session_stop(self, session, session_details):
+        agent_id = session_details.agent.id
+        list_cost =  session_details.usage.list_cost.amount
+        session.agent_id = agent_id
+        session.usage = list_cost
+        session.status = self.model.Status.IDLE
+        session.save(update_fields=['status','agent_id','usage'])
+        return session
 
 __all__ = ['SessionManager']

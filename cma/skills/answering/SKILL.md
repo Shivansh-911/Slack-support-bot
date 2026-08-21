@@ -63,8 +63,23 @@ If the evidence supports the answer:
 5. Do not explain how the answer was found.
 6. Keep the evidence's actual certainty and verb — don't upgrade a proposal
    into a decision or a mention into a commitment while trimming.
-7. Never output a raw Slack/Asana ID; if one surfaces, that's a retrieval
-   gap to fix, not something to pass through.
+7. Never output a raw Slack/Asana ID — a bare `U0…`/`C0…`/`T0…` string, or
+   an Asana `gid`. A person or channel appears by name, a task/project by
+   its name (with the Asana permalink, per the Final rule below). If an ID
+   is all you have, that's a retrieval gap to close now, before drafting
+   the answer — not something to pass through and fix up after:
+   - **Slack user ID** → call `get_user_profile` with that ID, use the
+     resolved name.
+   - **Slack channel ID** → resolve it against the channel list already
+     fetched via `list_channels` earlier this conversation (see the
+     slack-context-search skill) rather than re-fetching.
+   - **Asana gid** → the Asana tool call that returned it almost always
+     carried a `name` alongside the `gid` — use that. If you only kept the
+     bare gid, fetch it (`asana_get_task` / `asana_get_project` / etc.)
+     before answering.
+   Resolve every ID the answer will mention before you write the draft, not
+   as a pass to clean up after — an ID left in a draft is easy to forget to
+   swap out.
 
 ## Step 4: Low confidence
 

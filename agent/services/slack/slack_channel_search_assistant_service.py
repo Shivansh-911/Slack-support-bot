@@ -6,8 +6,11 @@ content_types is always forced to `messages` regardless of what's passed in:
 `files`/`channels` results carry no channel_id field, which matters once
 channel scoping is reintroduced here.
 
-channel_ids/exclude_channel_ids are accepted but currently no-ops — channel
-allowlist scoping is being reworked elsewhere and isn't wired back in yet.
+channel_ids arrives here already filtered to the caller's whitelist —
+AgentslackCustomToolService validates each entry against channel_mapping
+before this is ever called — and is used to build an `in:<#channel>`
+scoped query. exclude_channel_ids is accepted but currently a no-op —
+that scoping is being reworked elsewhere and isn't wired back in yet.
 """
 
 from django.conf import settings
@@ -46,8 +49,6 @@ class SlackChannelSearchAssistantService:
             channel_mapping
     ):
 
-        _ = channel_ids
-        # _ = exclude_channel_ids
 
         params = {
             "query": self._scoped_query(query, channel_mapping, channel_ids),

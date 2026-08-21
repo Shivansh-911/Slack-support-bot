@@ -15,10 +15,15 @@ only if needed → answer from evidence.
 
 **Channel** — If the user names one or more channels, restrict to those IDs.
 Otherwise search all readable channels. Never guess an ID; only use IDs that
-are already known to be allowlisted or that you've explicitly resolved. If a
-supplied ID fails allowlist validation, the whole call is invalid — don't
-retry it unchanged, substitute a guess, or silently widen the search to the
-whole workspace.
+are already known to be allowlisted or that you've explicitly resolved. A
+supplied ID that fails allowlist validation is dropped from the call, not
+fatal to it — the search still runs with whichever IDs remain, and the reply
+notes which were dropped. Only if *every* supplied ID fails validation does
+the call return an error instead of running; don't retry that case unchanged,
+substitute a guess, or silently widen the search to the whole workspace.
+`context_channel_id` is a single ID, not a list — if it fails allowlist
+validation the call is rejected outright, same as any other single-channel
+field.
 
 **Person** — Resolve with `users_search`, taking the closest unambiguous
 match. If nothing matches, drop the person constraint and continue.

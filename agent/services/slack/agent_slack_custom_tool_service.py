@@ -5,6 +5,16 @@ Dispatches `agent.custom_tool_use` events by tool name to the service that
 actually runs them. Mirrors AgentAsanaCustomToolService's shape: one
 `_handle_*` method per tool, each pulling its own fields off `event.input`
 explicitly and passing them by name.
+
+Every tool's single-channel field is named `channel` by convention, so
+`handle_custom_tool_use` gates it once, here, against the run's channel
+whitelist (`channel_mapping`) before dispatch — any future single-channel
+tool gets this check for free just by naming its field `channel`. The one
+exception is `search_whitelisted_channels`: its `channel_ids` is a list, so
+a single bad entry shouldn't reject the whole call the way Asana's
+workspace/project gate does. `_handle_search` filters that list down to the
+whitelisted subset itself and notes what got dropped, only erroring out if
+nothing in the list was in scope.
 """
 
 import json
@@ -28,13 +38,28 @@ class AgentslackCustomToolService:
     def handles(self, tool_name):
         return tool_name in self._handlers
 
-    def handle_custom_tool_use(self, event, channel_mapping=None):
+    def handle_custom_tool_use(self, event, channel_mapping):
+        channel = event.input.get('channel')
+        if channel is not None and channel not in channel_mapping:
+            return self._reply(event, {'error': f'Channel {channel} is not whitelisted.'})
         return self._handlers[event.name](event, channel_mapping)
 
     def _handle_search(self, event, channel_mapping):
+        channel_ids = event.input.get('channel_ids')
+        out_of_scope = []
+        if channel_ids:
+            out_of_scope = [c for c in channel_ids if c not in channel_mapping]
+            channel_ids = [c for c in channel_ids if c in channel_mapping]
+            if not channel_ids:
+                return self._reply(event, {'error': 'None of the requested channel_ids are whitelisted.'})
+
+        context_channel_id = event.input.get('context_channel_id')
+        if context_channel_id and context_channel_id not in channel_mapping:
+            return self._reply(event, {'error': f'Channel {context_channel_id} is not whitelisted.'})
+
         result = SlackChannelSearchAssistantService().search(
             query=event.input.get('query'),
-            channel_ids=event.input.get('channel_ids'),
+            channel_ids=channel_ids,
             # exclude_channel_ids=event.input.get('exclude_channel_ids'),
             # action_token=event.input.get('action_token'),
             include_bots=event.input.get('include_bots'),
@@ -42,7 +67,7 @@ class AgentslackCustomToolService:
             before=event.input.get('before'),
             after=event.input.get('after'),
             include_context_messages=event.input.get('include_context_messages'),
-            context_channel_id=event.input.get('context_channel_id'),
+            context_channel_id=context_channel_id,
             cursor=event.input.get('cursor'),
             sort=event.input.get('sort'),
             sort_dir=event.input.get('sort_dir'),
@@ -54,10 +79,10 @@ class AgentslackCustomToolService:
             disable_semantic_search=event.input.get('disable_semantic_search'),
             channel_mapping=channel_mapping
         )
-        return self._reply(event, result)
+        return self._reply(event, result, out_of_scope)
 
     def _handle_list_conversation_members(self, event, channel_mapping):
-        result = SlackChannelMembersService().members(event.input.get('channel_id'))
+        result = SlackChannelMembersService().members(event.input.get('channel'))
         return self._reply(event, result)
 
     def _handle_get_user_profile(self, event, channel_mapping):
@@ -70,12 +95,15 @@ class AgentslackCustomToolService:
         return self._reply(event, result)
     
 
-    def _reply(self, event, result):
+    def _reply(self, event, result, out_of_scope=None):
         if isinstance(result, dict) and result.get('error'):
             return self._result(event, result['error'], is_error=True)
         if isinstance(result, list) and not result:
             return self._result(event, 'No results found.')
-        return self._result(event, json.dumps(result, indent=2, default=str))
+        text = json.dumps(result, indent=2, default=str)
+        if out_of_scope:
+            text += f"\n\nNote: these channel_ids were not whitelisted and were excluded from the search: {', '.join(out_of_scope)}"
+        return self._result(event, text)
 
     def _result(self, event, text, is_error=False):
         reply = {

@@ -111,7 +111,7 @@ class SlackAPI:
 
         try:
             response = client.users_info(
-                user= 'U0AQXU5JRE1'
+                user= 'U0ARVJT4124'
             )
         except Exception as error:
             return {"error": f"Slack search failed: {error}"}
@@ -168,8 +168,25 @@ class SlackAPI:
         except SlackApiError:
             pass
 
+    def list_channel_members(self):
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
+        try:
+            response = client.conversations_history(channel="C04GJCY2ENA",limit=1)
+            return response
+        except SlackApiError:
+            pass
+
+    def list_conversation(self):
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
+        try:
+            response = client.conversations_history(channel="C07RF9Y304S",limit=5)
+            return response
+        except SlackApiError:
+            pass
+
+
     def main(self):
-        return self.fetch()
+        return self.userinfo()
 
 
 if __name__ == "__main__":

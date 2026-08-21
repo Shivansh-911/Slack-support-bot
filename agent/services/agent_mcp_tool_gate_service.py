@@ -8,8 +8,19 @@ only has Slack MCP calls left to check.
 
 class AgentMcpToolGateService:
 
-    def handle_mcp_tool_use(self, event):
-        if event.mcp_server_name == 'slack':        
+    def handle_mcp_tool_use(self, event, channel_mapping):
+        if event.mcp_server_name == 'slack':   
+
+            channel = event.input.get("channel_id")
+            if channel is not None and channel not in channel_mapping:
+                return {
+                    "type": "user.tool_confirmation",
+                    "tool_use_id": event.id,
+                    "result": "deny",
+                    "deny_message": f"{channel} is out of scope"
+                }
+
+
             return {
                 "type": "user.tool_confirmation",
                 "tool_use_id": event.id,

@@ -33,7 +33,7 @@ class SlackEventListenerService:
     REACTION_EMOJI = 'eyes'
     BUSY_MESSAGE = "Still working on your last message in this thread — I'll get to this one right after."
     EMPTY_ANSWER_MESSAGE = "I didn't get a text response for that — could you rephrase or ask again?"
-    MENTION_PATTERN = re.compile(r'<@\w+>')
+    MENTION_PATTERN = re.compile(r'<@U0BLGQY78SH>')
 
     def register(self, bolt_app):
         bolt_app.middleware(self.archive_event)
@@ -60,18 +60,20 @@ class SlackEventListenerService:
         question = self._strip_question(event.get('text'))
         agent_run_service = AgentRunService()
         try:
-            answer = agent_run_service.handle_run(
-                channel_id, 
-                # channel_name, 
-                thread_ts, 
-                team_id, 
-                user_id, 
-                question
+            posted_any = agent_run_service.handle_run(
+                channel_id,
+                # channel_name,
+                thread_ts,
+                team_id,
+                user_id,
+                question,
+                lambda text: self._post(client, channel_id, thread_ts, text),
             )
         except SessionBusyError:
             self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
             return
-        self._post(client, channel_id, thread_ts, answer)
+        if not posted_any:
+            self._post(client, channel_id, thread_ts, '')
 
 
 
@@ -90,15 +92,18 @@ class SlackEventListenerService:
             question = event.get('text')
             agent_run_service = AgentRunService()
             try:
-                answer = agent_run_service.handle_run(
-                    channel_id, thread_ts, team_id, user_id, question
+                posted_any = agent_run_service.handle_run(
+                    channel_id, thread_ts, team_id, user_id, question,
+                    lambda text: self._post(client, channel_id, thread_ts, text),
                 )
             except SessionBusyError:
                 self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
                 return
-            self._post(client, channel_id, thread_ts, answer)
+            if not posted_any:
+                self._post(client, channel_id, thread_ts, '')
             # print(channel_name)
-
+        else:
+            return("out") 
         
 
     def acknowledge_unhandled_event(self, ack):

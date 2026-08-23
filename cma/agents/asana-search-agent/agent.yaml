@@ -1,0 +1,463 @@
+name: Asana Search Agent
+model: claude-haiku-4-5
+
+# Roster member of cma/agents/orchestrator.yaml's `multiagent` coordinator.
+# This agent is never talked to directly by a Slack user — the orchestrator
+# delegates an Asana-shaped slice of a question to it and reads back one of
+# the four response shapes defined in the system prompt's §3. It has no
+# `answering` skill and no Slack tools: composing the final user-facing
+# reply and cross-source classification both live on the orchestrator.
+#
+# The 18 read-only Asana tools below mirror roychri/mcp-server-asana's tool
+# set one-for-one by name and purpose, copied verbatim from cma/agent.yaml's
+# Asana half. Every one of them enforces constants.WHITELISTED_ASANA_WORKSPACES /
+# WHITELISTED_ASANA_PROJECTS itself before ever calling Asana — see
+# cma/agent.yaml's own comment block for the per-tool breakdown of how each
+# one resolves and checks scope. Write tools (create/update/delete/complete/
+# comment/move) are not implemented at all.
+
+tools:
+  - type: custom
+    name: asana_list_workspaces
+    description: >-
+      List the Asana workspaces this agent can see — filtered down to only the
+      whitelisted workspace(s); a workspace outside that whitelist is never named
+      in the result even if the underlying token can see it.
+    input_schema:
+      type: object
+      properties: {}
+
+  - type: custom
+    name: asana_search_projects
+    description: >-
+      Find projects in a workspace by regex name match. Requires a whitelisted
+      workspace_gid. Results are filtered to whitelisted projects only — a name
+      match against a project outside constants.py's whitelist is dropped, not
+      surfaced.
+      If you have not yet read the asana-search skill this conversation,
+      read it with the read tool before this call.
+    input_schema:
+      type: object
+      properties:
+        workspace_gid:
+          type: string
+          description: A whitelisted Asana workspace gid.
+        name_pattern:
+          type: string
+          description: Regular expression matched against each project's name.
+        archived:
+          type: boolean
+          description: Optional. Filter to archived (true) or active (false) projects only.
+      required:
+        - workspace_gid
+        - name_pattern
+
+  - type: custom
+    name: asana_search_tasks
+    description: >-
+      Asana's premium advanced task search (`/workspaces/{gid}/tasks/search`),
+      scoped to a whitelisted workspace_gid. Always restricted to the whitelisted
+      project(s) regardless of what's asked for — narrower than a full
+      workspace-wide search by design. Premium-only and capped at 100
+      unstable-ordered results on Asana's side; for exhaustive listing within one
+      project prefer asana_get_tasks_for_project instead.
+      If you have not yet read the asana-search skill this conversation,
+      read it with the read tool before this call.
+    input_schema:
+      type: object
+      properties:
+        workspace_gid:
+          type: string
+          description: A whitelisted Asana workspace gid.
+        text:
+          type: string
+          description: Free-text search term.
+        assignee_any:
+          type: string
+          description: Comma-separated user gids (or "me") — matches any of them.
+        completed:
+          type: boolean
+          description: Filter to completed (true) or incomplete (false) tasks only.
+        projects_any:
+          type: array
+          items:
+            type: string
+          description: >-
+            Optional. Narrow further to these project gids — any not on the
+            whitelist is dropped rather than rejecting the whole call. Omit to
+            search every whitelisted project.
+        sort_by:
+          type: string
+          enum:
+            - due_date
+            - created_at
+            - completed_at
+            - modified_at
+            - likes
+          description: Field to sort results by.
+        sort_ascending:
+          type: boolean
+          description: Sort direction; defaults to descending.
+        opt_fields:
+          type: string
+          description: Comma-separated Asana opt_fields to return, in place of the default set.
+      required:
+        - workspace_gid
+
+  - type: custom
+    name: asana_get_task
+    description: >-
+      Get one task's detail by gid. This endpoint carries no workspace/project
+      field of its own, so the task's project/workspace membership is resolved
+      and checked against the whitelist before anything is returned — a task
+      outside scope is refused, not merely discouraged by these instructions.
+    input_schema:
+      type: object
+      properties:
+        task_gid:
+          type: string
+          description: The task's gid.
+        opt_fields:
+          type: string
+          description: Comma-separated Asana opt_fields to return, in place of the default set.
+      required:
+        - task_gid
+
+  - type: custom
+    name: asana_get_task_stories
+    description: >-
+      Get a task's comments and system activity (stories). Same whitelist check
+      as asana_get_task — resolved via the task's project/workspace membership.
+    input_schema:
+      type: object
+      properties:
+        task_gid:
+          type: string
+          description: The task's gid.
+      required:
+        - task_gid
+
+  - type: custom
+    name: asana_get_project
+    description: >-
+      Get one project's detail by gid. Requires a whitelisted project_gid.
+    input_schema:
+      type: object
+      properties:
+        project_gid:
+          type: string
+          description: A whitelisted Asana project gid.
+        opt_fields:
+          type: string
+          description: Comma-separated Asana opt_fields to return, in place of the default set.
+      required:
+        - project_gid
+
+  - type: custom
+    name: asana_get_project_task_counts
+    description: >-
+      Get a project's task/milestone counts (total, incomplete, completed).
+      Requires a whitelisted project_gid.
+    input_schema:
+      type: object
+      properties:
+        project_gid:
+          type: string
+          description: A whitelisted Asana project gid.
+      required:
+        - project_gid
+
+  - type: custom
+    name: asana_get_project_sections
+    description: >-
+      List a project's sections. Requires a whitelisted project_gid.
+    input_schema:
+      type: object
+      properties:
+        project_gid:
+          type: string
+          description: A whitelisted Asana project gid.
+      required:
+        - project_gid
+
+  - type: custom
+    name: asana_get_multiple_tasks_by_gid
+    description: >-
+      Batch-fetch up to 25 tasks by gid in one call. Each gid is checked
+      individually against the whitelist (via its project/workspace membership) —
+      a mixed batch returns only the tasks that resolve to scope, with the rest
+      reported back by gid under skipped_not_whitelisted rather than silently
+      dropped.
+    input_schema:
+      type: object
+      properties:
+        task_gids:
+          type: array
+          items:
+            type: string
+          description: Up to 25 task gids.
+        opt_fields:
+          type: string
+          description: Comma-separated Asana opt_fields to return, in place of the default set.
+      required:
+        - task_gids
+
+  - type: custom
+    name: asana_get_project_status
+    description: >-
+      Get one project status update by its own gid. Asana's project-status
+      record carries no project/workspace reference of its own, so this is the
+      one tool in this set with no code-level whitelist check — only call it on
+      a status gid already returned by a whitelist-checked
+      asana_get_project_statuses call, never on a bare gid from anywhere else.
+    input_schema:
+      type: object
+      properties:
+        project_status_gid:
+          type: string
+          description: >-
+            A project-status gid, obtained from a prior asana_get_project_statuses
+            call on a whitelisted project — never pass one from another source.
+      required:
+        - project_status_gid
+
+  - type: custom
+    name: asana_get_project_statuses
+    description: >-
+      List a project's status updates. Requires a whitelisted project_gid.
+    input_schema:
+      type: object
+      properties:
+        project_gid:
+          type: string
+          description: A whitelisted Asana project gid.
+      required:
+        - project_gid
+
+  - type: custom
+    name: asana_get_tag
+    description: >-
+      Get one tag's detail by gid. A tag carries only a workspace, not a
+      project, so this resolves the tag's workspace and checks it against the
+      whitelist first.
+    input_schema:
+      type: object
+      properties:
+        tag_gid:
+          type: string
+          description: The tag's gid.
+      required:
+        - tag_gid
+
+  - type: custom
+    name: asana_get_tags_for_task
+    description: >-
+      List the tags on a task. Same whitelist check as asana_get_task —
+      resolved via the task's project/workspace membership.
+    input_schema:
+      type: object
+      properties:
+        task_gid:
+          type: string
+          description: The task's gid.
+      required:
+        - task_gid
+
+  - type: custom
+    name: asana_get_tasks_for_tag
+    description: >-
+      List tasks carrying a tag. A tag carries only a workspace, so this
+      resolves the tag's workspace and checks it against the whitelist first.
+    input_schema:
+      type: object
+      properties:
+        tag_gid:
+          type: string
+          description: The tag's gid.
+        opt_fields:
+          type: string
+          description: Comma-separated Asana opt_fields to return, in place of the default set.
+      required:
+        - tag_gid
+
+  - type: custom
+    name: asana_get_tags_for_workspace
+    description: >-
+      List every tag defined in a workspace. Requires a whitelisted workspace_gid.
+    input_schema:
+      type: object
+      properties:
+        workspace_gid:
+          type: string
+          description: A whitelisted Asana workspace gid.
+      required:
+        - workspace_gid
+
+  - type: custom
+    name: asana_get_subtasks
+    description: >-
+      List a task's subtasks. Same whitelist check as asana_get_task — resolved
+      via the parent task's project/workspace membership.
+    input_schema:
+      type: object
+      properties:
+        task_gid:
+          type: string
+          description: The parent task's gid.
+      required:
+        - task_gid
+
+  - type: custom
+    name: asana_get_tasks_for_project
+    description: >-
+      List every task in a project, fully paginated — the free-plan-friendly
+      alternative to asana_search_tasks when you want everything in one
+      whitelisted project rather than a filtered/keyword search.
+      If you have not yet read the asana-search skill this conversation,
+      read it with the read tool before this call.
+    input_schema:
+      type: object
+      properties:
+        project_gid:
+          type: string
+          description: A whitelisted Asana project gid.
+        completed_since:
+          type: string
+          description: >-
+            ISO 8601 timestamp, or "now" to return only incomplete tasks. Omit to
+            include tasks regardless of completion state.
+        opt_fields:
+          type: string
+          description: Comma-separated Asana opt_fields to return, in place of the default set.
+        limit:
+          type: integer
+          description: Maximum tasks to fetch (default 100; use a higher value for exhaustive listing).
+      required:
+        - project_gid
+
+  - type: custom
+    name: asana_get_my_tasks
+    description: >-
+      List the caller's own tasks in a workspace (Asana's per-workspace "My
+      Tasks" list). Requires a whitelisted workspace_gid.
+      If you have not yet read the asana-search skill this conversation,
+      read it with the read tool before this call.
+    input_schema:
+      type: object
+      properties:
+        workspace_gid:
+          type: string
+          description: A whitelisted Asana workspace gid.
+        completed_since:
+          type: string
+          description: >-
+            ISO 8601 timestamp, or "now" to return only incomplete tasks. Omit to
+            include tasks regardless of completion state.
+        opt_fields:
+          type: string
+          description: Comma-separated Asana opt_fields to return, in place of the default set.
+        limit:
+          type: integer
+          description: Maximum tasks to fetch (default 100).
+      required:
+        - workspace_gid
+
+  # A scratchpad for collating results. The environment has no egress, so
+  # these cannot reach the network. `read` is load-bearing: tool outputs over
+  # ~100,000 characters are offloaded to a file in the sandbox with only a
+  # preview in context, and without it large project/task listings are
+  # unreachable.
+  - type: agent_toolset_20260401
+    default_config:
+      enabled: true
+    configs:
+      - name: web_fetch
+        enabled: false
+      - name: web_search
+        enabled: false
+
+skills:
+    # asana skill
+  - type: custom
+    skill_id: skill_01LkxXWD9Ftota86BEj7uBby
+    version: latest
+
+system: |
+  You are the Asana-search specialist in a multi-agent support system. An
+  orchestrator agent delegates Asana-related questions — or the Asana half
+  of a compound question — to you. You never talk to the end user: your
+  final response is read by the orchestrator, which composes the actual
+  reply from it. Don't write anything that assumes a human is reading it
+  directly.
+
+  ## 0. Required skill read
+
+  Before your first Asana call this conversation — before any `asana_*`
+  tool — use the `read` tool to open the `asana-search` skill. Once per
+  conversation; don't re-read on later calls.
+
+  ## 1. Allowlist
+
+  Only access:
+
+    workspace_gid: 1203355867603831
+    project_gid: 1211134942672045
+
+  Read-only. If the delegated question asks to create, edit, complete,
+  delete, or comment, report that as Out of scope (§3) — this agent only
+  reads Asana.
+
+  ## 2. Access boundaries and research quality
+
+  The allowlist is a hard boundary — if something's outside it, don't reach
+  for a broader call to get it anyway; report it as Out of scope (§3). A
+  tool failure isn't evidence the data doesn't exist — report it as an
+  Error (§3), never as an empty result. Prefer thorough retrieval (e.g.
+  `asana_get_tasks_for_project` for exhaustive listing) over the first
+  plausible match.
+
+  ## 3. Output contract
+
+  You're handing evidence to the orchestrator, not writing a user-facing
+  reply. Your entire final message must be exactly one of these shapes —
+  pick the one that fits, and combine Findings with an Error if part of the
+  lookup worked and part didn't:
+
+  **Findings** — you found relevant material:
+  ```
+  ## Findings
+  - <task/project/tag name and gid>: <relevant detail — status, assignee,
+    due date, comment> — <link if available>
+  - ...
+  ```
+  Include enough detail (gid, status, assignee, dates) that the orchestrator
+  can cross-reference this against Slack or another source without
+  re-querying.
+
+  **Clarification needed** — the request is genuinely ambiguous within
+  scope (e.g. two tasks with the same name):
+  ```
+  ## Clarification needed
+  <the specific question to relay to the user, naming the candidates>
+  ```
+
+  **Out of scope** — the question names a workspace, project, or write
+  action outside what you can access:
+  ```
+  ## Out of scope
+  <what was asked for and why it's inaccessible>
+  ```
+
+  **Error** — a tool call failed:
+  ```
+  ## Error
+  <what failed and what that means for the answer — never phrase a failure
+  as "no results found">
+  ```
+
+  ## 4. Message discipline
+
+  You have no end user to talk to, so there is no reason to narrate. Call
+  tools silently — no "let me check," "looking now," or similar before,
+  between, or after tool calls. The only text you produce all turn is the
+  single, final, §3-shaped response, written once retrieval is done.

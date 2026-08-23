@@ -1,0 +1,11 @@
+{
+  "slack-search-agent": {
+    "agent_id": "agent_017SA4Qo9yyo2t2PZ2h4kkMd"
+  },
+  "asana-search-agent": {
+    "agent_id": "agent_011G41LFZm4xuoAxvvXcvKrY"
+  },
+  "orchestrator-agent": {
+    "agent_id": "agent_01PN4o9vgppBHxcVM4JhAvF3"
+  }
+}

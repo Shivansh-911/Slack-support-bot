@@ -30,8 +30,77 @@ class AgentSessionCreateService:
             vault_ids=[settings.CMA_VAULT_ID] if settings.CMA_VAULT_ID else [],
             budget=self._budget(),
             title=self._title(channel_id, thread_ts),
+            resources=self._resources(),
         )
         return session.id
+
+    def _resources(self):
+
+        if not settings.CMA_SLACK_MEMORY_STORE_ID:
+            return []
+        if not settings.CMA_WHITELISTED_CHANNELS:
+            return []
+        return [
+            # CMA_SLACK_MEMORY_STORE_ID => per-channel/per-user context files.
+            # Mount path is NOT hardcoded here — CMA auto-injects the real
+            # mount path, access mode, and this instructions text into the
+            # session's system prompt, so the agent always sees the correct
+            # live path rather than one we guessed.
+            {
+                'type': 'memory_store',
+                'memory_store_id': settings.CMA_SLACK_MEMORY_STORE_ID,
+                'access': 'read_write',
+                'instructions': (
+                    "Holds one file per channel and per user: "
+                    "channel:{channel_id}.md and user:{user_id}.md. "
+                    ""
+                    "channel:{channel_id}.md covers: the channel's name, its "
+                    "purpose, how it's used, and other durable facts about "
+                    "it. "
+                    "user:{user_id}.md covers: the person's name, role, which "
+                    "channels they're present in, their projects, and other "
+                    "durable facts about them. "
+                    ""
+                    "1. Before resolving a channel or user, check here first "
+                    "— an existing file means you don't need to re-resolve it "
+                    "from scratch. "
+                    "2. After resolving new information about a channel or "
+                    "user, reconcile it against that file: "
+                    "if it already says the same thing, leave the file "
+                    "alone; if it contradicts what's on file, update just "
+                    "the contradicted part in place — don't leave old and "
+                    "new claims both standing, and don't rewrite the whole "
+                    "file; if it's new and not already captured, append it "
+                    "under the relevant heading; if no file exists yet, "
+                    "create one using the format above. "
+                    "3. If a single fact involves both a channel and a user "
+                    "(e.g. a person's role in that channel), write it to "
+                    "both files — don't record it in only one place. "
+                    "4. Never overwrite a file wholesale; only ever touch "
+                    "the specific line or section a piece of new "
+                    "information affects."
+                )
+            },
+            # CMA_WHITELISTED_CHANNELS => single read-only allowlist file,
+            # channels.md, listing every Slack channel_id (and its name) this
+            # agent may access. Read at the start of every conversation.
+            {
+                'type': 'memory_store',
+                'memory_store_id': settings.CMA_WHITELISTED_CHANNELS,
+                'access': 'read_only',
+                'instructions': (
+                    "Contains a single file, channels.md, listing every Slack "
+                    "channel_id (and its name) this agent is allowed to "
+                    "access. "
+                    "1. Read it once at the start of every conversation, "
+                    "before the first Slack tool call. "
+                    "2. Before calling any Slack tool that takes a "
+                    "channel_id, confirm that id appears in this file first — "
+                    "if it doesn't, treat the channel as out of scope rather "
+                    "than calling the tool."
+                )
+            }
+        ]
 
     def _budget(self):
         return {

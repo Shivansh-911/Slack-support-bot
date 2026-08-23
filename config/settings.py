@@ -153,3 +153,17 @@ CMA_AGENT_ID = env('CMA_AGENT_ID')
 CMA_ENVIRONMENT_ID = env('CMA_ENVIRONMENT_ID')
 CMA_VAULT_ID = env('CMA_VAULT_ID')
 CMA_SESSION_BUDGET_CENTS = env.int('CMA_SESSION_BUDGET_CENTS', default=200)
+
+# memstore_01FTh8QGyLtKpExTj6uJdxWB, created via `ant beta:memory-stores create`.
+# General-purpose Slack agent cache, mounted read_write (see
+# AgentSessionCreateService._resources). Empty and unused for now — no sync
+# logic writes to it yet. Optional for now: default '' so environments
+# without it still boot.
+CMA_SLACK_MEMORY_STORE_ID = env('CMA_SLACK_MEMORY_STORE_ID', default='')
+
+# memstore_011WNorCLfzuJNs8oP1J6gEF, created via `ant beta:memory-stores create`.
+# Holds /channels.md — currently an empty placeholder, mounted read_only with
+# a must-read instruction (see AgentSessionCreateService._resources). No sync
+# logic writes the actual channel list to it yet; that's a deliberate
+# follow-up. Optional for now: default '' so environments without it still boot.
+CMA_WHITELISTED_CHANNELS = env('CMA_WHITELISTED_CHANNELS', default='')

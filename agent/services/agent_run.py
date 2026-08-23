@@ -84,12 +84,25 @@ class AgentRunService:
 
     def _context_message(self, channel_id, thread_ts, user_id, question):
         return (
-            '[Slack context]\n'
-            f'channel_id: {channel_id}\n'
-            # f'channel_name: {channel_name}\n'
-            f'thread_ts: {thread_ts}\n'
-            f'user_id: {user_id}\n\n'
-            f'{question}'
+            "[Slack context — where this question was posted, not where to search]\n"
+            f"channel_id: {channel_id}\n"
+            f"thread_ts: {thread_ts}\n"
+            f"user_id: {user_id}\n\n"
+    
+            "[Question]\n"
+            "Don't restrict your search to the channel above unless the question "
+            "itself names that channel (or says \"this channel,\" \"here,\" etc.).\n\n"
+            f"{question}\n\n"
+    
+            "[Reminders]\n"
+            "- Before writing the final answer, reconcile relevant memory for "
+            "this channel, thread, and user. Treat memory as context that may "
+            "be incomplete or stale, and prioritize the current conversation "
+            "when the two conflict.\n"
+            "- Don't include any memory-reconciliation marker or internal "
+            "reasoning in the final answer.\n"
+            "- Keep intermediate agent messages rare and short — only for "
+            "something the user actually needs to see."
         )
 
 

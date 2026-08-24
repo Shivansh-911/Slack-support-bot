@@ -60,19 +60,20 @@ class SlackEventListenerService:
         question = self._strip_question(event.get('text'))
         agent_run_service = AgentRunService()
         try:
-            posted_any = agent_run_service.handle_run(
+            answer = agent_run_service.handle_run(
                 channel_id,
                 # channel_name,
                 thread_ts,
                 team_id,
                 user_id,
                 question,
-                lambda text: self._post(client, channel_id, thread_ts, text),
+                # lambda text: self._post(client, channel_id, thread_ts, text),
             )
+            self._post(client, channel_id, thread_ts, answer)
         except SessionBusyError:
             self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
             return
-        if not posted_any:
+        if not answer:
             self._post(client, channel_id, thread_ts, '')
 
 
@@ -92,14 +93,15 @@ class SlackEventListenerService:
             question = event.get('text')
             agent_run_service = AgentRunService()
             try:
-                posted_any = agent_run_service.handle_run(
+                answer = agent_run_service.handle_run(
                     channel_id, thread_ts, team_id, user_id, question,
-                    lambda text: self._post(client, channel_id, thread_ts, text),
+                    # lambda text: self._post(client, channel_id, thread_ts, text),
                 )
+                self._post(client, channel_id, thread_ts, answer)
             except SessionBusyError:
                 self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
                 return
-            if not posted_any:
+            if not answer:
                 self._post(client, channel_id, thread_ts, '')
             # print(channel_name)
         else:

@@ -111,7 +111,7 @@ class SlackAPI:
 
         try:
             response = client.users_info(
-                user= 'U0ARVJT4124'
+                user= 'U0B7C6RBUD8'
             )
         except Exception as error:
             return {"error": f"Slack search failed: {error}"}
@@ -183,6 +183,31 @@ class SlackAPI:
             return response
         except SlackApiError:
             pass
+
+    def list_with_members(self):
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
+        try:
+            response = client.usergroups_list(include_count=True, include_disabled=False)
+        except SlackApiError as error:
+            return {'error': f'Slack request failed: {error}'}
+        groups = []
+        for usergroup in response.get('usergroups', []):
+            groups.append({
+                'id': usergroup.get('id'),
+                'name': usergroup.get('name') or '',
+                'handle': usergroup.get('handle') or '',
+                'description': usergroup.get('description') or '',
+                'user_count': usergroup.get('user_count'),
+                'users': self._members(client, usergroup.get('id')),
+            })
+        return groups
+
+    def _members(self, client, usergroup_id):
+        try:
+            response = client.usergroups_users_list(usergroup=usergroup_id)
+        except SlackApiError:
+            return []
+        return response.get('users', [])
 
 
     def main(self):

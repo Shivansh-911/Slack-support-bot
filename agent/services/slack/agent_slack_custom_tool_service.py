@@ -23,6 +23,8 @@ from agent.services.slack.slack_channel_search_assistant_service import SlackCha
 from agent.services.slack.slack_channel_members_service import SlackChannelMembersService
 from agent.services.slack.slack_user_profile_service import SlackUserProfileService
 from agent.services.slack.slack_channel_service import SlackChannelService
+from agent.services.slack.slack_usergroups_service import SlackUserGroupsService
+from agent.services.slack.slack_reactions_service import SlackReactionsService
 
 
 class AgentslackCustomToolService:
@@ -33,6 +35,8 @@ class AgentslackCustomToolService:
             'list_conversation_members': self._handle_list_conversation_members,
             'get_user_profile': self._handle_get_user_profile,
             'list_channels': self._handle_list_channels,
+            'list_usergroups': self._handle_list_usergroups,
+            'add_reaction': self._handle_add_reaction,
         }
 
     def handles(self, tool_name):
@@ -93,7 +97,19 @@ class AgentslackCustomToolService:
         mapping = SlackChannelService()._fetch_id_to_name()
         result = [{'channel_id': channel_id, 'name': name} for channel_id, name in mapping.items()]
         return self._reply(event, result)
-    
+
+    def _handle_list_usergroups(self, event, channel_mapping):
+        result = SlackUserGroupsService().list_with_members()
+        return self._reply(event, result)
+
+    def _handle_add_reaction(self, event, channel_mapping):
+        result = SlackReactionsService().add_reaction(
+            channel_id=event.input.get('channel'),
+            timestamp=event.input.get('timestamp'),
+            emoji_name=event.input.get('emoji_name'),
+        )
+        return self._reply(event, result)
+
 
     def _reply(self, event, result, out_of_scope=None):
         if isinstance(result, dict) and result.get('error'):

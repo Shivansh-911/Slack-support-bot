@@ -80,6 +80,17 @@ If the evidence supports the answer:
    Resolve every ID the answer will mention before you write the draft, not
    as a pass to clean up after — an ID left in a draft is easy to forget to
    swap out.
+8. If the answer names or references an Asana task or project, its
+   `permalink_url` must appear right alongside the name — e.g. `Fix login
+   bug (https://app.asana.com/0/…)`. This holds for every task the answer
+   mentions, not just the primary one, and survives step 3.4's trimming:
+   the permalink isn't "extra information" being added back in, it's part
+   of how the task is named. The Asana tool call that returned the task
+   almost always carried `permalink_url` alongside `name`/`gid` — carry it
+   forward with the task. If you only kept the bare name or gid, fetch the
+   task (`asana_get_task` / `asana_get_project`) to get its permalink
+   before answering — do this at the same time as the ID resolution in
+   item 7, not as a separate pass after the draft.
 
 ## Step 4: Low confidence
 
@@ -119,7 +130,8 @@ or the task status unless the user asks for those details.
 ## Final rule
 
 The retrieved evidence is used to determine the answer, NOT to determine
-what additional information should be shown.
-Always carry asana `premalink_url`
+what additional information should be shown, except for the Asana
+permalink rule in step 3.8, which always applies whenever an Asana task
+or project is named.
 
 Answer the question asked — not the research performed.

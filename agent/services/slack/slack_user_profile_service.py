@@ -24,6 +24,10 @@ class SlackUserProfileService:
             'display_name': profile.get('display_name') or '',
             'email': profile.get('email') or '',
             'is_bot': member.get('is_bot', False),
+            'is_admin': member.get('is_admin', False),
+            'is_owner': member.get('is_owner', False),
+            'team_id': member.get('team_id') or '',
+            'title': profile.get('title') or '',
         }
 
 

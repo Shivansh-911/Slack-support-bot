@@ -8,35 +8,60 @@ description: Search Slack via search_whitelisted_channels, the only Slack retrie
 `search_whitelisted_channels` is the only Slack retrieval mechanism. There is
 no fallback — no channel history, thread API, or other search tool.
 
-The flow: resolve scope → build one strong query → search → evaluate → refine
-only if needed → answer from evidence.
+The flow: check memory → resolve scope → build one strong query → search →
+evaluate → refine only if needed → answer from evidence.
 
-## 1. Resolve scope
+## 1. Check memory first
+
+Resolving a channel, person, or usergroup by name is a repeated cost across
+turns and conversations — before calling any resolution tool in step 2,
+check memory for that exact fact first.
+
+| Fact | Memory first | Tool if missing/stale |
+|---|---|---|
+| Channel directory (name → channel_id) | Check memory | `list_channels` |
+| A specific person's profile | Check memory | `users_search` then `get_user_profile` |
+| Usergroup directory (handle/name → id + members) | Check memory | `list_usergroups` |
+
+If memory already has the fact, use it directly and skip the tool call. If
+memory is missing it, or it looks stale, call the tool — then write the
+resolved fact back to memory so the next resolution, this conversation or a
+later one, doesn't repeat the same call.
+
+This gate covers name/ID resolution only. It never substitutes for
+`search_whitelisted_channels` itself — message content always comes from a
+live search, never from memory.
+
+## 2. Resolve scope
 
 **Channel** — If the user names one or more channels, restrict to those IDs.
 Otherwise search all readable channels. Never guess an ID; only use IDs that
-are already known to be allowlisted or that you've explicitly resolved. A
-supplied ID that fails allowlist validation is dropped from the call, not
-fatal to it — the search still runs with whichever IDs remain, and the reply
-notes which were dropped. Only if *every* supplied ID fails validation does
-the call return an error instead of running; don't retry that case unchanged,
-substitute a guess, or silently widen the search to the whole workspace.
+are already known to be allowlisted or that you've explicitly resolved
+(memory first, then `list_channels` per step 1). A supplied ID that fails
+allowlist validation is dropped from the call, not fatal to it — the search
+still runs with whichever IDs remain, and the reply notes which were
+dropped. Only if *every* supplied ID fails validation does the call return
+an error instead of running; don't retry that case unchanged, substitute a
+guess, or silently widen the search to the whole workspace.
 `context_channel_id` is a single ID, not a list — if it fails allowlist
 validation the call is rejected outright, same as any other single-channel
 field.
 
-**Person** — Resolve with `users_search`, taking the closest unambiguous
-match. If nothing matches, drop the person constraint and continue.
+**Person** — Check memory for this person first (step 1). If absent,
+resolve with `users_search`, taking the closest unambiguous match, and cache
+the resolved profile to memory. If nothing matches, drop the person
+constraint and continue.
 
 **Team / usergroup** — References like "platform team," "@backend-team," or
-"infra team" often map to a Slack usergroup. Call `usergroups_list` and match
-on handle or name (exact match first, then closest unambiguous). A resolved
-usergroup's members are a relevance/attribution signal, not an author or a
-channel filter — don't gate search by membership, and don't attribute an
-individual's message to the group. If no match, just treat the phrase as a
-normal topic keyword.
+"infra team" often map to a Slack usergroup. Check memory for the usergroup
+directory first (step 1). If absent, call `list_usergroups` and match on
+handle or name (exact match first, then closest unambiguous), then cache the
+directory to memory. A resolved usergroup's members are a relevance/
+attribution signal, not an author or a channel filter — don't gate search by
+membership, and don't attribute an individual's message to the group. If no
+match, just treat the phrase as a normal topic keyword.
 
-## 2. Build the query
+## 3. Build the query
 
 Construct the query from what's actually being asked, not the raw question.
 Weight: topic > person > team > project/system > action/event.
@@ -51,7 +76,7 @@ Weight: topic > person > team > project/system > action/event.
   meaningfully sharpens precision. Don't repeat terms already in the query.
 - **`with:<@user_id>`** filters to messages involving that person.
 
-## 3. Apply filters
+## 4. Apply filters
 
 - **Time** — translate explicit ranges ("yesterday," "since Monday") into
   `after`/`before`. Never invent timestamps, and don't quietly widen the
@@ -66,7 +91,7 @@ Weight: topic > person > team > project/system > action/event.
   `include_deleted_users: false`). Only include them when the user asks or
   when historical attribution specifically requires it.
 
-## 4. Evaluate and refine
+## 5. Evaluate and refine
 
 After each search, classify the result:
 
@@ -85,7 +110,7 @@ coverage and current results are insufficient — not just because a
 `next_cursor` exists. `assistant.search.context` has tight rate limits, so
 one well-built search beats several small ones.
 
-## 5. Answer
+## 6. Answer
 
 - Attribute statements to their actual author; never expose raw Slack user
   IDs — resolve names with `get_user_profile` only when needed for the
@@ -100,9 +125,10 @@ answering skill's job. Hand off the resolved evidence and let it decide.
 ## Examples
 
 **"What did the platform team handle this month?"**
-Resolve "platform team" → usergroups_list. Search all readable channels,
-semantic query on platform work this month, use members for
-relevance/attribution, add context if needed.
+Resolve "platform team" → check memory for the usergroup directory first,
+`list_usergroups` if absent. Search all readable channels, semantic query on
+platform work this month, use members for relevance/attribution, add
+context if needed.
 
 **"What did Alex say about the deployment issue?"**
 Resolve Alex. Semantic query: "Alex deployment issue." No channel restriction

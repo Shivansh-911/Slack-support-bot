@@ -96,12 +96,28 @@ Weight: topic > person > team > project/system > action/event.
 
 ## 5. Evaluate and refine
 
-After each search, classify the result:
+Search one call at a time by default: issue a single `search_whitelisted_channels`
+call, wait for its result, and evaluate before deciding whether another call
+is needed. Don't fire several searches in parallel and reconcile the results
+afterward — most questions resolve in one call, and evaluating before the
+next one is what lets you stop there instead of over-searching. The
+exception is when the question itself asks for something that genuinely
+needs multiple independent angles at once (e.g. "compare how #a and #b each
+handled X," or an explicit request for a deep/comprehensive sweep) — there,
+parallel calls across the distinct angles are appropriate.
+
+After each search, read the result and judge how much of the question it
+actually answers before doing anything else. This is a judgment call, not
+literal counting — but as a rule of thumb, once you're roughly 60% or more
+of the way to a complete answer, that's enough: stop and answer from what
+you have rather than searching further to round it out. Going deeper past
+that point is only for when the question itself explicitly asks for a deep
+or comprehensive sweep.
 
 | Evidence | Action |
 |---|---|
-| Direct answer | Stop. |
-| Partial | One targeted refinement (change one dimension: wording, semantic↔keyword, term clause, time, channel). |
+| Direct answer, or roughly 60%+ of it covered | Stop. Answer from what you have; note the small gap, if any, rather than closing it with another search. |
+| Meaningful gap (roughly under 60% covered) | One targeted refinement (change one dimension: wording, semantic↔keyword, term clause, time, channel). |
 | Weak or none | Try a genuinely different angle once, then report that no relevant evidence was found — don't fabricate an answer or keep varying the same query. |
 
 Preserve explicit channel, time, and person/team constraints through

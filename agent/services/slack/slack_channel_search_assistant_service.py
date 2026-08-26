@@ -19,7 +19,7 @@ from slack_sdk.errors import SlackApiError
 
 
 class SlackChannelSearchAssistantService:
-    MAX_RESULTS = 20
+    MAX_RESULTS = 5
     CONTENT_TYPES = ["messages"]
 
     def __init__(self):

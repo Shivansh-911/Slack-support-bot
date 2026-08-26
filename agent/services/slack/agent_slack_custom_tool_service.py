@@ -100,7 +100,8 @@ class AgentslackCustomToolService:
             disable_semantic_search=event.input.get('disable_semantic_search'),
             channel_mapping=channel_mapping
         )
-        return self._reply(event, result, out_of_scope, formatter=SlackSearchResultFormatter().format)
+        formated_text =SlackSearchResultFormatter().format(result)
+        return self._reply(event, result, formated_text, out_of_scope)
 
     def _handle_list_conversation_members(self, event, channel_mapping):
         result = SlackChannelMembersService().members(event.input.get('channel'))
@@ -127,20 +128,21 @@ class AgentslackCustomToolService:
         )
         return self._reply(event, result)
 
-
-    def _reply(self, event, result, out_of_scope=None, formatter=None):
+        
+    def _reply(self, event, result, formated_text=None, out_of_scope=None):
         if isinstance(result, dict) and result.get('error'):
             return self._result(event, result['error'], is_error=True)
         if isinstance(result, list) and not result:
             return self._result(event, 'No results found.')
-        # `formatter` lets a specific tool (e.g. search) hand back a
-        # compact, flattened text block instead of raw JSON — see
-        # SlackSearchResultFormatter. Tools without one keep the default
-        # generic JSON dump.
-        text = formatter(result) if formatter else json.dumps(result, indent=2, default=str)
+        # A specific tool (e.g. search) can hand back a compact, flattened
+        # text block instead of raw JSON — see SlackSearchResultFormatter.
+        # Tools that don't pass one keep the default generic JSON dump.
+        if formated_text is None:
+            print("not formatted")
+            formated_text = json.dumps(result, indent=2, default=str)
         if out_of_scope:
-            text += f"\n\nNote: these channel_ids were not whitelisted and were excluded from the search: {', '.join(out_of_scope)}"
-        return self._result(event, text)
+            formated_text += f"\n\nNote: these channel_ids were not whitelisted and were excluded from the search: {', '.join(out_of_scope)}"
+        return self._result(event, formated_text)
 
     def _result(self, event, text, is_error=False):
         reply = {

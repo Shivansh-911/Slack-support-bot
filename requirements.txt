@@ -4,6 +4,7 @@ Django==6.1
 markdown-to-mrkdwn==0.3.3
 django-environ==0.14.0
 djangorestframework==3.18.0
+gunicorn==23.0.0
 psycopg[binary]==3.3.4
 requests==2.32.3
 slack_sdk==3.43.0

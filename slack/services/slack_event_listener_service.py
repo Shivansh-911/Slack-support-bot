@@ -34,6 +34,8 @@ class SlackEventListenerService:
     BUSY_MESSAGE = "Still working on your last message in this thread — I'll get to this one right after."
     EMPTY_ANSWER_MESSAGE = "I didn't get a text response for that — could you rephrase or ask again?"
     MENTION_PATTERN = re.compile(r'<@U0BLGQY78SH>')
+    TRIGGER_MENTION = 'mention'
+    TRIGGER_MESSAGE = 'message'
 
     def register(self, bolt_app):
         bolt_app.middleware(self.archive_event)
@@ -49,15 +51,18 @@ class SlackEventListenerService:
 
     def handle_app_mention(self, ack, event, client, body):
         ack()
-        
+
 
         self._react(client, event)
         team_id = body.get('team_id')
         channel_id = event.get('channel')
         # channel_name = self._channel_name(channel_id)
         thread_ts = event.get('thread_ts') or event.get('ts')
+        message_ts = event.get('ts')
         user_id = event.get('user')
         question = self._strip_question(event.get('text'))
+        print("From app mention")
+        print(question)
         agent_run_service = AgentRunService()
         try:
             answer = agent_run_service.handle_run(
@@ -67,45 +72,53 @@ class SlackEventListenerService:
                 team_id,
                 user_id,
                 question,
-                # lambda text: self._post(client, channel_id, thread_ts, text),
+                message_ts,
+                self.TRIGGER_MENTION,
             )
-            self._post(client, channel_id, thread_ts, answer)
         except SessionBusyError:
             self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
             return
-        if not answer:
-            self._post(client, channel_id, thread_ts, '')
+        self._post(client, channel_id, thread_ts, answer)
 
 
 
     def handle_message(self, ack, event, client, body):
-
-        ack()
         
+        ack()
+
+        if self.MENTION_PATTERN.search(event.get('text') or ''):
+            return
+
         team_id = body.get('team_id')
         channel_id = event.get('channel')
         thread_ts = event.get('thread_ts') or event.get('ts')
         session = Session.objects.find_by_thread(team_id, channel_id, thread_ts)
-        if session and session.cma_session_id: 
-            self._react(client, event)
-            # channel_name = self._channel_name(channel_id)
-            user_id = event.get('user')
-            question = event.get('text')
-            agent_run_service = AgentRunService()
-            try:
-                answer = agent_run_service.handle_run(
-                    channel_id, thread_ts, team_id, user_id, question,
-                    # lambda text: self._post(client, channel_id, thread_ts, text),
-                )
-                self._post(client, channel_id, thread_ts, answer)
-            except SessionBusyError:
-                self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
-                return
-            if not answer:
-                self._post(client, channel_id, thread_ts, '')
-            # print(channel_name)
-        else:
-            return("out") 
+        if not (session and session.cma_session_id):
+            return
+
+        self._react(client, event)
+        # channel_name = self._channel_name(channel_id)
+        message_ts = event.get('ts')
+        user_id = event.get('user')
+        question = event.get('text')
+        print("From handel message")
+        print(question)
+        agent_run_service = AgentRunService()
+        try:
+            answer = agent_run_service.handle_run(
+                channel_id, 
+                thread_ts, 
+                team_id, 
+                user_id, 
+                question,
+                message_ts, 
+                self.TRIGGER_MESSAGE,
+            )
+        except SessionBusyError:
+            self._post(client, channel_id, thread_ts, self.BUSY_MESSAGE)
+            return
+        if answer:
+            self._post(client, channel_id, thread_ts, answer)
         
 
     def acknowledge_unhandled_event(self, ack):

@@ -11,6 +11,8 @@ the caller only gets back the single final answer once the run ends, so it
 alone decides what reaches Slack.
 """
 
+from django.utils import timezone
+
 from agent.exceptions import SessionBusyError
 from agent.models.session import Session
 from agent.services.anthropic_client_service import AnthropicClientService
@@ -26,7 +28,7 @@ class AgentRunService:
     REQUIRES_ACTION = 'requires_action'
     channel_mapping = None 
 
-    def handle_run(self, channel_id, thread_ts, team_id, user_id, question):
+    def handle_run(self, channel_id, thread_ts, team_id, user_id, question, message_ts, trigger_type):
         self.channel_mapping = SlackChannelService()._fetch_id_to_name()
 
         print(self.channel_mapping)
@@ -49,14 +51,14 @@ class AgentRunService:
         try:
             Session.objects.mark_running(session)
             return self._drive(
-                client, session_id, channel_id, thread_ts, user_id, question
+                client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type
             )
         finally:
             session_details = client.beta.sessions.retrieve(session_id=session.cma_session_id)
             Session.objects.session_stop(session, session_details)
             # Session.objects.mark_idle(session)
 
-    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question):
+    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type):
         tool_gate = AgentMcpToolGateService()
         final_text_blocks = []
 
@@ -68,7 +70,7 @@ class AgentRunService:
                 "content": [{
                     "type": "text",
                     "text": self._context_message(
-                        channel_id, thread_ts, user_id, question
+                        channel_id, thread_ts, user_id, question, message_ts, trigger_type
                     ),
                 }],
             })
@@ -87,12 +89,18 @@ class AgentRunService:
     def _send(self, client, session_id, event):
         return client.beta.sessions.events.send(session_id, events=[event])
 
-    def _context_message(self, channel_id, thread_ts, user_id, question):
+    def _context_message(self, channel_id, thread_ts, user_id, question, message_ts, trigger_type):
         return (
             "[Slack context — where this question was posted, not where to search]\n"
             f"channel_id: {channel_id}\n"
             f"thread_ts: {thread_ts}\n"
-            f"user_id: {user_id}\n\n"
+            f"message_ts: {message_ts}\n"
+            f"user_id: {user_id}\n"
+            f"trigger: {trigger_type}\n"
+            f"current_datetime: {self._current_datetime()}  "
+            "(authoritative — use this, not message_ts or ambient guesswork, "
+            "for any freshness/staleness comparison against memory, and for "
+            "any freshness cutoff you pass to a specialist)\n\n"
             "Don't restrict your search to the channel above unless the question "
             "itself names that channel (or says \"this channel,\" \"here,\" etc.).\n\n"
             "[Question]\n"
@@ -109,6 +117,12 @@ class AgentRunService:
             "said earlier in the turn is discarded, not shown."
         )
 
+
+    def _current_datetime(self):
+        # Minute-level precision, fixed UTC label (settings.TIME_ZONE) — no
+        # local/implicit timezone, no seconds; both would add ambiguity
+        # rather than remove it.
+        return timezone.now().strftime('%Y-%m-%d %H:%M UTC (%A)')
 
     def _handle_event(self, event, tool_gate):
         if event.type == 'agent.mcp_tool_use':

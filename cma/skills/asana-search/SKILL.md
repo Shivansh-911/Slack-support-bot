@@ -17,8 +17,10 @@ below).
    field. Never omit it and never substitute a different gid, even if the tool would technically
    run without one. A call outside it is rejected before it reaches Asana; retrying with a
    different gid won't work either.
-2. **For "what's in the project" / "list tasks" questions**, start with `asana_get_tasks_for_project`
-   or `asana_search_tasks` rather than guessing at a task gid.
+2. **For "what's in the project" / "list everything" questions**, use `asana_get_tasks_for_project`.
+   For anything else — including a keyword/filtered lookup that comes back empty — use
+   `asana_search_tasks` instead of guessing at a task gid; see Search economy below for why
+   `asana_get_tasks_for_project` is not the next step when a search finds nothing.
 3. **For "what's on my list"**, use `asana_get_my_tasks`.
 4. **A bare gid from the user (e.g. a pasted app.asana.com URL) still works directly** on
    `asana_get_task`, `asana_get_task_stories`, `asana_get_subtasks`, `asana_get_tags_for_task`,
@@ -37,22 +39,66 @@ There's exactly one workspace and project in scope for the whole session (set in
 system prompt), so nothing here needs to search across or pick between projects/workspaces
 — every tool below already assumes that single target.
 
+## Search economy
+
+`asana_search_tasks` ranks by loose term relevance inside the one whitelisted project,
+which is a shared multi-client support backlog. A bare generic technical term ("404",
+"GA4", "GSC", "AMP") searched on its own scans that whole backlog and comes back full of
+other clients' unrelated tasks — that's expensive, not just imprecise, since every
+irrelevant task's full fields land in context.
+
+- **Always anchor a free-text query with the specific client/entity name** from the
+  question, combined with the actual issue terms, in one query — e.g.
+  `"Rising Kashmir 404 GA4 GSC"`, not three separate searches for `"Rising Kashmir"`,
+  `"404 extended slug"`, and `"GA4 GSC"`. Never run a bare generic-term search with the
+  client/entity name dropped from it.
+- **One well-constructed query beats several narrow variations fired in parallel.** Build
+  it from every term the question actually gives you before calling the tool, rather than
+  searching term-by-term and widening later.
+- **After a search, classify the result before deciding whether to search again:**
+
+  | Result | Action |
+  |---|---|
+  | Relevant match(es) | Stop searching; report them. |
+  | Only irrelevant matches (e.g. the client name matched other tasks, not this issue) | Report no relevant tasks found — don't start dropping the client name to chase more hits. |
+  | Nothing at all | Try one genuinely different phrasing of the same client + issue, then stop and report no relevant tasks found. |
+
+  Two searches total is the normal ceiling for one delegated question. Reaching for a
+  third near-synonym variation almost never turns up what the first two missed — it just
+  spends tokens re-scanning the same backlog.
+
+`asana_get_tasks_for_project` is not part of this refinement loop. It returns the whitelisted
+project's entire backlog — hundreds of tasks across every client it holds — so it's only for a
+question that itself asks to list/browse everything, never a fallback reached for when
+`asana_search_tasks` comes back empty or thin. A search finding nothing is a No relevant results
+answer; escalating it to a full project listing costs far more than it recovers.
+
+Once a search returns a candidate, resist pulling more detail than the question needs. A
+task's name plus the fields `asana_search_tasks` already returned (assignee, completed,
+due_on, permalink_url) are usually enough to judge relevance and to answer. Only call
+`asana_get_task`/`asana_get_task_stories` on a candidate whose name already reads as a real
+match — not on every loosely related hit — and never call either one twice on the same gid
+in one conversation; reuse what the first call already returned.
+
 ## Tool guide
 
-**`asana_get_tasks_for_project`** — every task in the whitelisted project, fully paginated. The
-default for browsing.
+**`asana_get_tasks_for_project`** — every task in the whitelisted project, fully paginated.
+Only for a question that explicitly asks for an exhaustive listing (see Search economy above)
+— never a substitute for a keyword search, and never reached for after one comes back empty.
 
 **`asana_search_tasks`** — free-text/filtered search, scoped by `workspace_gid`. This is Asana's
 advanced search, which is **premium-only** and does not offset-paginate — results are capped at 100
 and unstable-ordered. Always restricted to the whitelisted project(s) regardless of what's asked
-for. For "all tasks in the project" prefer `asana_get_tasks_for_project` instead; reach for this one
-for filtered/keyword queries.
+for. The default tool for anything keyword/filtered — see Search economy above for how to query
+it without scanning the whole backlog.
 
 **`asana_get_my_tasks`** — the caller's own tasks, scoped by `workspace_gid`.
 
-**`asana_get_task`** — one task's full detail, by gid.
+**`asana_get_task`** — one task's full detail, by gid. Call only on a confirmed candidate (see
+Search economy above), and only once per gid per conversation.
 
-**`asana_get_task_stories`** — a task's comments and system activity.
+**`asana_get_task_stories`** — a task's comments and system activity. Same restraint as
+`asana_get_task`: only on a confirmed candidate, only once per gid.
 
 **`asana_get_subtasks`** — a task's subtasks.
 

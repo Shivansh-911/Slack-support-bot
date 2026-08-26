@@ -9,12 +9,15 @@ explicitly and passing them by name.
 Every tool's single-channel field is named `channel` by convention, so
 `handle_custom_tool_use` gates it once, here, against the run's channel
 whitelist (`channel_mapping`) before dispatch — any future single-channel
-tool gets this check for free just by naming its field `channel`. The one
-exception is `search_whitelisted_channels`: its `channel_ids` is a list, so
-a single bad entry shouldn't reject the whole call the way Asana's
-workspace/project gate does. `_handle_search` filters that list down to the
-whitelisted subset itself and notes what got dropped, only erroring out if
-nothing in the list was in scope.
+tool gets this check for free just by naming its field `channel`. There
+are two exceptions. `search_whitelisted_channels`: its `channel_ids` is a
+list, so a single bad entry shouldn't reject the whole call the way
+Asana's workspace/project gate does — `_handle_search` filters that list
+down to the whitelisted subset itself and notes what got dropped, only
+erroring out if nothing in the list was in scope. `add_reaction`: it acts
+on whatever channel/message the Slack event already told it about, not a
+retrieval target chosen by the agent, so the whitelist (which scopes
+search) doesn't apply to it.
 """
 
 import json
@@ -28,6 +31,8 @@ from agent.services.slack.slack_reactions_service import SlackReactionsService
 
 
 class AgentslackCustomToolService:
+    ADD_REACTION_EMOJI = '-1::skin-tone-4'
+    CHANNEL_GATE_EXEMPT_TOOLS = {'add_reaction'}
 
     def __init__(self):
         self._handlers = {
@@ -44,7 +49,11 @@ class AgentslackCustomToolService:
 
     def handle_custom_tool_use(self, event, channel_mapping):
         channel = event.input.get('channel')
-        if channel is not None and channel not in channel_mapping:
+        if (
+            channel is not None
+            and event.name not in self.CHANNEL_GATE_EXEMPT_TOOLS
+            and channel not in channel_mapping
+        ):
             return self._reply(event, {'error': f'Channel {channel} is not whitelisted.'})
         return self._handlers[event.name](event, channel_mapping)
 
@@ -66,8 +75,15 @@ class AgentslackCustomToolService:
             channel_ids=channel_ids,
             # exclude_channel_ids=event.input.get('exclude_channel_ids'),
             # action_token=event.input.get('action_token'),
-            include_bots=event.input.get('include_bots'),
-            include_deleted_users=event.input.get('include_deleted_users'),
+            # Follow the slack-search-agent's explicit value when it sends
+            # one; if the field is omitted, default it to False here rather
+            # than passing None through — SlackChannelSearchAssistantService
+            # drops None values before calling Slack, which would otherwise
+            # leave Slack's own server-side default (include bots) in
+            # effect and let the bot's own prior replies come back as
+            # "search results" on a repeated question.
+            include_bots=event.input.get('include_bots', False),
+            include_deleted_users=event.input.get('include_deleted_users', False),
             before=event.input.get('before'),
             after=event.input.get('after'),
             include_context_messages=event.input.get('include_context_messages'),
@@ -106,7 +122,7 @@ class AgentslackCustomToolService:
         result = SlackReactionsService().add_reaction(
             channel_id=event.input.get('channel'),
             timestamp=event.input.get('timestamp'),
-            emoji_name=event.input.get('emoji_name'),
+            emoji_name=self.ADD_REACTION_EMOJI,
         )
         return self._reply(event, result)
 

@@ -32,6 +32,9 @@ This gate covers name/ID resolution only. It never substitutes for
 `search_whitelisted_channels` itself — message content always comes from a
 live search, never from memory.
 
+Check memory case-insensitively — a case-sensitive miss is not evidence the
+fact is missing.
+
 ## 2. Resolve scope
 
 **Channel** — If the user names one or more channels, restrict to those IDs.
@@ -113,8 +116,8 @@ one well-built search beats several small ones.
 ## 6. Answer
 
 - Attribute statements to their actual author; never expose raw Slack user
-  IDs — resolve names with `get_user_profile` only when needed for the
-  answer.
+  IDs — resolve names per the agent's memory-first rule, whatever point in
+  the turn you're resolving them at.
 - Don't claim a channel, person, or usergroup doesn't exist unless the
   matching resolution step actually failed to find it.
 

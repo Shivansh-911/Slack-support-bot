@@ -4,7 +4,7 @@ model: claude-haiku-4-5
 mcp_servers:
   - type: url
     name: slack
-    url: https://slack-mcp-server-production-6be5.up.railway.app/sse
+    url: https://slack-mcp-server-production-9996.up.railway.app/sse
 
 tools:
   - type: mcp_toolset
@@ -22,7 +22,7 @@ tools:
         enabled: true
         permission_policy:
           type: always_ask
-      - name: users_search
+      - name: usersq_search
         enabled: true
         permission_policy:
           type: always_ask

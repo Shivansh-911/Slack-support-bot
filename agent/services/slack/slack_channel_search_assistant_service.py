@@ -86,7 +86,7 @@ class SlackChannelSearchAssistantService:
         })
 
         try:
-            return self.client.api_call(
+            response = self.client.api_call(
                 "assistant.search.context",
                 json=params,
             )
@@ -95,6 +95,16 @@ class SlackChannelSearchAssistantService:
             return {
                 "error": error.response.get("error", str(error))
             }
+
+        # api_call returns a SlackResponse, not a plain dict — it isn't
+        # JSON-serializable, so passing it straight through makes the
+        # caller's json.dumps(..., default=str) fall back to
+        # SlackResponse.__str__ (i.e. Python's str(dict) repr: single
+        # quotes, True/False, backslash-escaped newlines) wrapped inside a
+        # JSON string. That double-encoded, non-standard blob is far
+        # harder for the model to parse reliably than real JSON. Return
+        # the plain dict so the caller emits proper JSON instead.
+        return response.data
 
     def _scoped_query(self, query, channel_mapping, channel_ids):
         if channel_ids:

@@ -28,6 +28,7 @@ from agent.services.slack.slack_user_profile_service import SlackUserProfileServ
 from agent.services.slack.slack_channel_service import SlackChannelService
 from agent.services.slack.slack_usergroups_service import SlackUserGroupsService
 from agent.services.slack.slack_reactions_service import SlackReactionsService
+from agent.services.slack.slack_search_result_formatter import SlackSearchResultFormatter
 
 
 class AgentslackCustomToolService:
@@ -99,7 +100,7 @@ class AgentslackCustomToolService:
             disable_semantic_search=event.input.get('disable_semantic_search'),
             channel_mapping=channel_mapping
         )
-        return self._reply(event, result, out_of_scope)
+        return self._reply(event, result, out_of_scope, formatter=SlackSearchResultFormatter().format)
 
     def _handle_list_conversation_members(self, event, channel_mapping):
         result = SlackChannelMembersService().members(event.input.get('channel'))
@@ -127,12 +128,16 @@ class AgentslackCustomToolService:
         return self._reply(event, result)
 
 
-    def _reply(self, event, result, out_of_scope=None):
+    def _reply(self, event, result, out_of_scope=None, formatter=None):
         if isinstance(result, dict) and result.get('error'):
             return self._result(event, result['error'], is_error=True)
         if isinstance(result, list) and not result:
             return self._result(event, 'No results found.')
-        text = json.dumps(result, indent=2, default=str)
+        # `formatter` lets a specific tool (e.g. search) hand back a
+        # compact, flattened text block instead of raw JSON — see
+        # SlackSearchResultFormatter. Tools without one keep the default
+        # generic JSON dump.
+        text = formatter(result) if formatter else json.dumps(result, indent=2, default=str)
         if out_of_scope:
             text += f"\n\nNote: these channel_ids were not whitelisted and were excluded from the search: {', '.join(out_of_scope)}"
         return self._result(event, text)

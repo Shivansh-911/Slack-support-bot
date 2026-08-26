@@ -101,6 +101,7 @@ class AgentslackCustomToolService:
             channel_mapping=channel_mapping
         )
         formated_text =SlackSearchResultFormatter().format(result)
+        print(formated_text)
         return self._reply(event, result, formated_text, out_of_scope)
 
     def _handle_list_conversation_members(self, event, channel_mapping):
@@ -145,6 +146,7 @@ class AgentslackCustomToolService:
         return self._result(event, formated_text)
 
     def _result(self, event, text, is_error=False):
+        print(text)
         reply = {
             'type': 'user.custom_tool_result',
             'custom_tool_use_id': event.id,

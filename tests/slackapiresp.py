@@ -12,7 +12,7 @@ class SlackAPI:
         # below, which runs after top-level imports are already resolved — a
         # module-level import of an `agent.*` package would fail before that
         # guard ever executes.
-        from agent.services.slack.slack_search_result_formatter import SlackSearchResultFormatter
+        from agent.services.slack.formatter.slack_search_result_formatter import SlackSearchResultFormatter
 
         channel_list = "in:<#C03E3P80CDV> OR in:<#C03EBMTEC14> OR in:<#C03F83XPEJU> OR in:<#C04AFL2GECE> OR in:<#C04AZRNAW7L> OR in:<#C05J50UV99R> OR in:<#C07RF9Y304S> OR in:<#C0APS04G7DM> OR in:<#C0B3LET9YQ4> OR in:<#C0BJN116WQ5>  OR in:<#C0BM44A3YCW>"
         user_query = "crictoday on development"

@@ -30,7 +30,7 @@ saving. `content_types` being messages-only means `files`/`channels`
 are ignored rather than formatted.
 """
 
-from agent.services.slack.slack_text_block_formatter import join_blocks
+from agent.services.slack.formatter.slack_text_block_formatter import join_blocks
 
 
 class SlackSearchResultFormatter:

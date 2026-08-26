@@ -28,7 +28,8 @@ from agent.services.slack.slack_user_profile_service import SlackUserProfileServ
 from agent.services.slack.slack_channel_service import SlackChannelService
 from agent.services.slack.slack_usergroups_service import SlackUserGroupsService
 from agent.services.slack.slack_reactions_service import SlackReactionsService
-from agent.services.slack.slack_search_result_formatter import SlackSearchResultFormatter
+from agent.services.slack.formatter.slack_search_result_formatter import SlackSearchResultFormatter
+from agent.services.slack.formatter.slack_channel_members_formatter import SlackChannelMembersFormatter
 
 
 class AgentslackCustomToolService:
@@ -106,7 +107,8 @@ class AgentslackCustomToolService:
 
     def _handle_list_conversation_members(self, event, channel_mapping):
         result = SlackChannelMembersService().members(event.input.get('channel'))
-        return self._reply(event, result)
+        formated_text = SlackChannelMembersFormatter().format(result)
+        return self._reply(event, result, formated_text)
 
     def _handle_get_user_profile(self, event, channel_mapping):
         result = SlackUserProfileService().get_user(event.input.get('user_id'))

@@ -7,26 +7,32 @@ from slack_sdk.errors import SlackApiError
 class SlackAPI:
 
     def fetch(self):
+        # Local import: this script is run directly (`python tests/slackapiresp.py`),
+        # and sys.path only gets the project root added in the __main__ guard
+        # below, which runs after top-level imports are already resolved — a
+        # module-level import of an `agent.*` package would fail before that
+        # guard ever executes.
+        from agent.services.slack.slack_search_result_formatter import SlackSearchResultFormatter
 
         channel_list = "in:<#C03E3P80CDV> OR in:<#C03EBMTEC14> OR in:<#C03F83XPEJU> OR in:<#C04AFL2GECE> OR in:<#C04AZRNAW7L> OR in:<#C05J50UV99R> OR in:<#C07RF9Y304S> OR in:<#C0APS04G7DM> OR in:<#C0B3LET9YQ4> OR in:<#C0BJN116WQ5>  OR in:<#C0BM44A3YCW>"
-        # user_query = "crictoday on development"
-        query = "developement on crictoday in:<#C04AZRNAW7L>"
-        # query = f'{user_query} {channel_list}'
+        user_query = "crictoday on development"
+        # query = "developement on crictoday in:<#C04AZRNAW7L>"
+        query = f'{user_query} {channel_list}'
         action_token = None
         channel_types = ['public_channel','private_channel']
         content_types = ["messages"]
-        include_bots = False
-        include_deleted_users = None
+        include_bots = True
+        include_deleted_users = True
         before = None
         after = None
-        include_context_messages = False
+        include_context_messages = True
         context_channel_id = None
         cursor = None
-        limit = None
+        limit = 3
         sort = "score"
         sort_dir = "desc"
-        include_message_blocks = False
-        highlight = True
+        include_message_blocks = True
+        highlight = False
         term_clauses = None
         modifiers = []
         include_archived_channels = None
@@ -65,15 +71,17 @@ class SlackAPI:
         messages = results["messages"]
         print("Query")
         print(query)
-        print("SORT")
-        print(sort)
-        print("RESULTS : ")
+        print("RAW RESULTS : ")
         print(response)
+
+        formatted = SlackSearchResultFormatter().format(response.data)
+        print("\nFORMATTED RESULTS : ")
+        print(formatted)
 
         # print("MESSAGES : ")
         # print(messages)
 
-        return 
+        return formatted
 
 
 
@@ -211,7 +219,7 @@ class SlackAPI:
 
 
     def main(self):
-        return self.userinfo()
+        return self.fetch()
 
 
 if __name__ == "__main__":

@@ -86,10 +86,19 @@ Weight: topic > person > team > project/system > action/event.
   window just because a search came back thin.
 <!-- - **Sort** — `score` for relevance questions; `timestamp` for "latest/recent";
   `timestamp` + `sort_dir: asc` when reconstructing a sequence of events. -->
-- **Context** (`include_context_messages: true`) — turn on for why/how,
-  decisions, incidents, disagreements, or any short/ambiguous message where
-  surrounding conversation changes the meaning. Skip it for simple factual
-  lookups.
+- **Context** — leave `include_context_messages` off (the default) on
+  `search_whitelisted_channels` itself; don't request it up front. It's
+  billed per result across the whole result set, not just the hit that
+  needs it. Instead, evaluate the plain search result first (step 5), and
+  only when a *specific* matched message's meaning genuinely depends on
+  surrounding conversation — why/how, a decision, an incident,
+  a disagreement, or a short/ambiguous message on its own — fetch that
+  one thread directly with `conversations_replies` (the message's
+  channel + its thread_ts, from the permalink or the result's own fields).
+  That scopes the extra cost to the one or two hits that actually need it
+  instead of paying for context on every result. If that message turns
+  out not to be part of a thread, `conversations_replies` just returns it
+  alone — that's a cheap confirmation, not an error.
 - **Bots and deleted users** — default both off (`include_bots: false`,
   `include_deleted_users: false`). Only include them when the user asks or
   when historical attribution specifically requires it.

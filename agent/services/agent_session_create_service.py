@@ -35,18 +35,15 @@ class AgentSessionCreateService:
         return session.id
 
     def _resources(self):
+        resources = []
 
-        if not settings.CMA_SLACK_MEMORY_STORE_ID:
-            return []
-        if not settings.CMA_WHITELISTED_CHANNELS:
-            return []
-        return [
+        if settings.CMA_SLACK_MEMORY_STORE_ID:
             # CMA_SLACK_MEMORY_STORE_ID => per-channel/per-user context files.
             # Mount path is NOT hardcoded here — CMA auto-injects the real
             # mount path, access mode, and this instructions text into the
             # session's system prompt, so the agent always sees the correct
             # live path rather than one we guessed.
-            {
+            resources.append({
                 'type': 'memory_store',
                 'memory_store_id': settings.CMA_SLACK_MEMORY_STORE_ID,
                 'access': 'read_write',
@@ -58,11 +55,13 @@ class AgentSessionCreateService:
                     "arrives, update an existing entry in place rather than "
                     "duplicating it; only touch the part that changed."
                 )
-            },
+            })
+
+        if settings.CMA_WHITELISTED_CHANNELS:
             # CMA_WHITELISTED_CHANNELS => single read-only allowlist file,
             # channels.md, listing every Slack channel_id (and its name) this
             # agent may access. Read at the start of every conversation.
-            {
+            resources.append({
                 'type': 'memory_store',
                 'memory_store_id': settings.CMA_WHITELISTED_CHANNELS,
                 'access': 'read_only',
@@ -77,8 +76,31 @@ class AgentSessionCreateService:
                     "if it doesn't, treat the channel as out of scope rather "
                     "than calling the tool."
                 )
-            }
-        ]
+            })
+
+        if settings.CMA_INSTRUCTIONS_MEMORY_STORE_ID:
+            # CMA_INSTRUCTIONS_MEMORY_STORE_ID => standing instructions a user
+            # has given the agent about how to behave and format answers.
+            # Global to the whole workspace, not scoped to a channel or user.
+            resources.append({
+                'type': 'memory_store',
+                'memory_store_id': settings.CMA_INSTRUCTIONS_MEMORY_STORE_ID,
+                'access': 'read_write',
+                'instructions': (
+                    "Holds standing instructions a user has given about how "
+                    "you should behave and format answers in this workspace "
+                    "— tone, response length, formatting, things to always "
+                    "or never do. These apply globally, not to one channel "
+                    "or user. Read it before answering every message and "
+                    "shape your response accordingly. When someone gives you "
+                    "an instruction meant to apply going forward rather than "
+                    "just this once, write it here — update an existing "
+                    "entry in place if it conflicts with or refines one "
+                    "already recorded, rather than duplicating it."
+                )
+            })
+
+        return resources
 
     def _budget(self):
         return {

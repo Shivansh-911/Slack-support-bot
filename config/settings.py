@@ -167,3 +167,12 @@ CMA_SLACK_MEMORY_STORE_ID = env('CMA_SLACK_MEMORY_STORE_ID', default='')
 # logic writes the actual channel list to it yet; that's a deliberate
 # follow-up. Optional for now: default '' so environments without it still boot.
 CMA_WHITELISTED_CHANNELS = env('CMA_WHITELISTED_CHANNELS', default='')
+
+# Create with `ant beta:memory-stores create`, then paste the returned id here.
+# Holds standing instructions/preferences a user has given the agent about
+# how it should behave and format answers, mounted read_write (see
+# AgentSessionCreateService._resources). Global for the whole workspace, not
+# scoped per channel or user. The agent reads and writes it itself — no sync
+# script involved. Optional for now: default '' so environments without it
+# still boot.
+CMA_INSTRUCTIONS_MEMORY_STORE_ID = env('CMA_INSTRUCTIONS_MEMORY_STORE_ID', default='')

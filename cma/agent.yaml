@@ -1,4 +1,4 @@
-name: Slack Support Agent
+name: Slack Support Agent old
 model: claude-haiku-4-5
 
 mcp_servers:

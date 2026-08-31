@@ -11,6 +11,11 @@ AgentslackCustomToolService validates each entry against channel_mapping
 before this is ever called — and is used to build an `in:<#channel>`
 scoped query. exclude_channel_ids is accepted but currently a no-op —
 that scoping is being reworked elsewhere and isn't wired back in yet.
+
+users_from is a list of Slack user IDs (already resolved by the caller,
+never a raw name) turned into ANDed `from:<@user_id>` clauses — a user
+mention, not the `in:<#channel_id>` channel-mention syntax channel_ids
+uses.
 """
 
 from django.conf import settings
@@ -31,6 +36,7 @@ class SlackChannelSearchAssistantService:
             channel_ids,
             # exclude_channel_ids,
             # action_token,
+            users_from,
             include_bots,
             include_deleted_users,
             before,
@@ -38,20 +44,21 @@ class SlackChannelSearchAssistantService:
             include_context_messages,
             context_channel_id,
             cursor,
-            sort,
+            # sort,
             sort_dir,
             # include_message_blocks,
             # highlight,
             term_clauses,
-            modifiers,
+            # modifiers,
             # include_archived_channels,
             disable_semantic_search,
             channel_mapping
     ):
 
+        
 
         params = {
-            "query": self._scoped_query(query, channel_mapping, channel_ids),
+            "query": self._scoped_query(query, channel_mapping, channel_ids, users_from),
             "content_types": self.CONTENT_TYPES,
             "channel_types": [
                 "public_channel",
@@ -69,12 +76,12 @@ class SlackChannelSearchAssistantService:
             "include_context_messages": include_context_messages,
             "context_channel_id": context_channel_id,
             "cursor": cursor,
-            "sort": sort,
+            "sort": 'score',
             "sort_dir": sort_dir,
             # "include_message_blocks": include_message_blocks,
             # "highlight": highlight,
             "term_clauses": term_clauses,
-            "modifiers": modifiers,
+            # "modifiers": modifiers,
             # "include_archived_channels": include_archived_channels,
             "disable_semantic_search": disable_semantic_search,
         }
@@ -106,7 +113,10 @@ class SlackChannelSearchAssistantService:
         # the plain dict so the caller emits proper JSON instead.
         return response.data
 
-    def _scoped_query(self, query, channel_mapping, channel_ids):
+    def _scoped_query(self, query, channel_mapping, channel_ids, users_from):
+        user_query = ''
+        if users_from:
+            user_query = ' '.join(f'from:<@{user_id}>' for user_id in users_from)
         if channel_ids:
             channel_query = self.resolve_search_channels(channel_ids)
         # elif exclude_channel_ids:
@@ -118,9 +128,7 @@ class SlackChannelSearchAssistantService:
         #     channel_query = self.resolve_search_channels(scoped_mapping)
         else:
             channel_query = self.resolve_search_channels(channel_mapping)
-        if not channel_query:
-            return query
-        return f'{query} {channel_query}'.strip()
+        return f'{query} {user_query} {channel_query}'.strip()
 
     def resolve_search_channels(self, channel_mapping):
         if not channel_mapping:

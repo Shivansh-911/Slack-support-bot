@@ -23,12 +23,16 @@ search) doesn't apply to it.
 import json
 
 from agent.services.slack.slack_channel_search_assistant_service import SlackChannelSearchAssistantService
+from agent.services.slack.slack_conversation_history_service import SlackConversationHistoryService
+from agent.services.slack.slack_conversation_replies_service import SlackConversationRepliesService
 from agent.services.slack.slack_channel_members_service import SlackChannelMembersService
 from agent.services.slack.slack_user_profile_service import SlackUserProfileService
 from agent.services.slack.slack_channel_service import SlackChannelService
 from agent.services.slack.slack_usergroups_service import SlackUserGroupsService
 from agent.services.slack.slack_reactions_service import SlackReactionsService
 from agent.services.slack.formatter.slack_search_result_formatter import SlackSearchResultFormatter
+from agent.services.slack.formatter.slack_conversation_history_formatter import SlackConversationHistoryFormatter
+from agent.services.slack.formatter.slack_conversation_replies_formatter import SlackConversationRepliesFormatter
 from agent.services.slack.formatter.slack_channel_members_formatter import SlackChannelMembersFormatter
 
 
@@ -39,6 +43,8 @@ class AgentslackCustomToolService:
     def __init__(self):
         self._handlers = {
             'search_whitelisted_channels': self._handle_search,
+            'conversations_history': self._handle_conversations_history,
+            'conversations_replies': self._handle_conversations_replies,
             'list_conversation_members': self._handle_list_conversation_members,
             'get_user_profile': self._handle_get_user_profile,
             'list_channels': self._handle_list_channels,
@@ -77,13 +83,7 @@ class AgentslackCustomToolService:
             channel_ids=channel_ids,
             # exclude_channel_ids=event.input.get('exclude_channel_ids'),
             # action_token=event.input.get('action_token'),
-            # Follow the slack-search-agent's explicit value when it sends
-            # one; if the field is omitted, default it to False here rather
-            # than passing None through — SlackChannelSearchAssistantService
-            # drops None values before calling Slack, which would otherwise
-            # leave Slack's own server-side default (include bots) in
-            # effect and let the bot's own prior replies come back as
-            # "search results" on a repeated question.
+            users_from=event.input.get('users_from'),
             include_bots=event.input.get('include_bots', False),
             include_deleted_users=event.input.get('include_deleted_users', False),
             before=event.input.get('before'),
@@ -91,19 +91,42 @@ class AgentslackCustomToolService:
             include_context_messages=event.input.get('include_context_messages'),
             context_channel_id=context_channel_id,
             cursor=event.input.get('cursor'),
-            sort=event.input.get('sort'),
+            # sort=event.input.get('sort'),
             sort_dir=event.input.get('sort_dir'),
             # include_message_blocks=event.input.get('include_message_blocks'),
             # highlight=event.input.get('highlight'),
             term_clauses=event.input.get('term_clauses'),
-            modifiers=event.input.get('modifiers'),
+            # modifiers=event.input.get('modifiers'),
             # include_archived_channels=event.input.get('include_archived_channels'),
-            disable_semantic_search=event.input.get('disable_semantic_search'),
+            disable_semantic_search=event.input.get('disable_semantic_search', False),
             channel_mapping=channel_mapping
         )
         formated_text =SlackSearchResultFormatter().format(result)
         print(formated_text)
         return self._reply(event, result, formated_text, out_of_scope)
+
+    def _handle_conversations_history(self, event, channel_mapping):
+        result = SlackConversationHistoryService().history(
+            channel=event.input.get('channel'),
+            include_activity_messages=event.input.get('include_activity_messages', False),
+            cursor=event.input.get('cursor'),
+            oldest=event.input.get('oldest'),
+            latest=event.input.get('latest'),
+        )
+        formated_text = SlackConversationHistoryFormatter().format(result)
+        return self._reply(event, result, formated_text)
+
+    def _handle_conversations_replies(self, event, channel_mapping):
+        result = SlackConversationRepliesService().replies(
+            channel=event.input.get('channel'),
+            thread_ts=event.input.get('thread_ts'),
+            include_activity_messages=event.input.get('include_activity_messages', False),
+            cursor=event.input.get('cursor'),
+            oldest=event.input.get('oldest'),
+            latest=event.input.get('latest'),
+        )
+        formated_text = SlackConversationRepliesFormatter().format(result)
+        return self._reply(event, result, formated_text)
 
     def _handle_list_conversation_members(self, event, channel_mapping):
         result = SlackChannelMembersService().members(event.input.get('channel'))

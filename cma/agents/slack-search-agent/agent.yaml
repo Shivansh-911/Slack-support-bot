@@ -1,101 +1,197 @@
-name: Slack Search Agent
+name: Slack Agent
 model: claude-haiku-4-5
 
-mcp_servers:
-  - type: url
-    name: slack
-    url: https://slack-mcp-server-production-9996.up.railway.app/sse
+# mcp_servers:
+#   - type: url
+#     name: slack
+#     url: https://slack-mcp-server-production-9996.up.railway.app/sse
+
+mcp_servers: {}
 
 tools:
-  - type: mcp_toolset
-    mcp_server_name: slack
-    default_config:
-      enabled: false
-      permission_policy:
-        type: always_ask
-    configs:
-      - name: conversations_history
-        enabled: true
-        permission_policy:
-          type: always_ask
-      - name: conversations_replies
-        enabled: true
-        permission_policy:
-          type: always_ask
-      - name: usersq_search
-        enabled: true
-        permission_policy:
-          type: always_ask
-      - name: channels_me
-        enabled: true
-        permission_policy:
-          type: always_ask
-      # - name: usergroups_list
-        # enabled: true
-        # permission_policy:
-          # type: always_ask
-
   - type: custom
     name: search_whitelisted_channels
     description: >-
-      Full-text Slack search (semantic and keyword) across all
-      channels this agent can read. Restrict to specific channels with
-      channel_ids. Entries in channel_ids outside the allowlist are
-      dropped and named in a note in the reply — the search still runs
-      with whatever remains; only an all-out-of-scope list fails the
-      call outright. context_channel_id outside the allowlist does
-      reject the call. Don't retry unchanged.
-      If you have not yet read the slack-context-search skill this
-      conversation, read it with the read tool before this call —
-      it covers scope resolution and query construction this schema
-      doesn't.
+      Full-text Slack search (semantic and keyword) across all whitelisted
+      channels this agent can read, backed by Slack's assistant.search.context
+      API. Results are capped at 5 per call — page further with cursor.
+
+      Scoping behavior differs between the two channel-related params:
+      `channel_ids` silently drops any non-allowlisted entries and runs the
+      search with whatever remains (dropped IDs are named in the reply's
+      note) — only an all-out-of-scope list fails the call outright.
+      `relevance_boost_channel` behaves oppositely: a non-allowlisted value
+      there rejects the whole call.
+
+      If you have not yet applied the slack-context-search skill's query
+      and scope-resolution guidance this conversation, do so before this
+      call — this schema only covers valid parameter shapes, not how to
+      construct a good query or resolve a name to an ID.
+
+      Don't retry an identical call unchanged.
     input_schema:
       type: object
       properties:
         query:
           type: string
-          description: Free-text Slack search query.
+          description: The string to search for.
         channel_ids:
           type: array
           items: {type: string}
-          description: Restrict to these channel IDs (must be allowlisted). Excludes exclude_channel_ids.
-        include_bots: {type: boolean}
-        include_deleted_users: {type: boolean}
+          description: >-
+            Restrict to these channel IDs. Resolve names to channel IDs
+            first — see the slack-context-search skill. Non-allowlisted
+            entries are dropped, not rejected; see the tool description.
+        users_from:
+          type: array
+          items: {type: string}
+          description: >-
+            Restrict to messages authored by these Slack user IDs. Resolve
+            names to user IDs first — see the slack-context-search skill.
+        include_bots:
+          type: boolean
+          description: "Include bot messages in results (default: false)."
+        include_deleted_users:
+          type: boolean
+          description: >-
+            Include messages from users whose accounts have since been
+            deleted (default: false).
         before:
           type: integer
-          description: Unix timestamp — results before this time.
+          description: Only messages before this Unix timestamp (inclusive).
         after:
           type: integer
-          description: Unix timestamp — results after this time.
-        include_context_messages: {type: boolean}
-        context_channel_id:
+          description: Only messages after this Unix timestamp (inclusive).
+        include_context_messages:
+          type: boolean
+          description: >-
+            Include surrounding context messages for each result (default:
+            false). Costs extra per result across the whole search, not
+            just the hit that needs it — leave this off and fetch
+            conversations_replies for the one specific message that needs
+            context instead.
+        relevance_boost_channel:
           type: string
-          description: Channel ID to scope search context, when applicable (per Slack API).
+          description: >-
+            Channel ID to boost search result relevance for (per Slack
+            API) — does not restrict which channels are searched, only
+            affects ranking. Must be allowlisted: unlike channel_ids, a
+            non-allowlisted value here rejects the whole call rather than
+            being dropped.
         cursor:
           type: string
-          description: Pagination cursor from a previous next_cursor.
-        limit:
-          type: integer
-          description: Max 20 (Slack default is 20).
-        sort_dir: {type: string, enum: [asc, desc]}
+          description: >-
+            The cursor returned by a previous call's next_cursor. Leave
+            blank for the first request; use this to get the next page of
+            results. Don't set this together with a new query, filter, or
+            scope change — paginate the same call, don't combine
+            pagination with a refinement.
+        sort_dir:
+          type: string
+          enum: [asc, desc]
+          description: "Sort direction (default: desc)."
         term_clauses:
           type: array
-          items: {type: object}
-          description: Results match every clause given (conjunctive normal form).
-        modifiers:
-          type: string
-          description: modifier:value pairs, e.g. "has:pin before:yesterday".
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                description: "Field to match on, e.g. 'text', 'user', 'channel'."
+              value:
+                type: string
+                description: "Exact value that must appear for this clause."
+            required: [field, value]
+          description: >-
+            Additional match clauses ANDed onto query (conjunctive normal
+            form). Use only when a specific term must appear verbatim and
+            meaningfully sharpens precision — don't repeat terms already in
+            query.
         disable_semantic_search:
           type: boolean
-          description: True = keyword-only, no semantic search.
+          description: >-
+            True = keyword-only exact matching, no semantic search
+            (default: false). Use for exact strings — error messages,
+            ticket IDs, identifiers.
       required: [query]
+
+  # - type: custom
+  #   name: conversations_history
+  #   description: >-
+  #     Get messages from a channel (or DM) by channel — most recent first.
+  #     When the reply's next_cursor is non-empty, more messages exist; pass
+  #     it back as cursor to fetch the next page. Don't set cursor together
+  #     with oldest/latest on the same call — paginate with cursor alone once
+  #     you've started.
+  #   input_schema:
+  #     type: object
+  #     properties:
+  #       channel:
+  #         type: string
+  #         description: >-
+  #           Channel ID to fetch history from (must be whitelisted). Resolve
+  #           a name to an ID first — see the slack-context-search skill.
+  #       cursor:
+  #         type: string
+  #         description: Pagination cursor from a previous call's next_cursor.
+  #       oldest:
+  #         type: integer
+  #         description: Only messages after this Unix timestamp (inclusive).
+  #       latest:
+  #         type: integer
+  #         description: Only messages before this Unix timestamp (inclusive).
+  #     required:
+  #       - channel
+
+  # - type: custom
+  #   name: conversations_replies
+  #   description: >-
+  #     Get a thread's messages (parent + replies) by channel and thread_ts.
+  #     When the reply's next_cursor is non-empty, more messages exist; pass
+  #     it back as cursor to fetch the next page. Don't set cursor together
+  #     with oldest/latest on the same call — paginate with cursor alone once
+  #     you've started.
+  #   input_schema:
+  #     type: object
+  #     properties:
+  #       channel:
+  #         type: string
+  #         description: >-
+  #           Channel ID the thread lives in (must be whitelisted). Resolve a
+  #           name to an ID via list_channels first — this tool doesn't
+  #           accept a #name or @user.
+  #       thread_ts:
+  #         type: string
+  #         description: >-
+  #           Timestamp (format 1234567890.123456) of the thread's parent
+  #           message, or of any message in the thread.
+  #       include_activity_messages:
+  #         type: boolean
+  #         description: >-
+  #           If true, include activity messages such as channel_join or
+  #           channel_leave. Default false.
+  #       cursor:
+  #         type: string
+  #         description: Pagination cursor from a previous call's next_cursor.
+  #       oldest:
+  #         type: integer
+  #         description: Only messages after this Unix timestamp (inclusive).
+  #       latest:
+  #         type: integer
+  #         description: Only messages before this Unix timestamp (inclusive).
+  #     required:
+  #       - channel
+  #       - thread_ts
 
   - type: custom
     name: list_conversation_members
     description: >-
       List the member user IDs of a Slack conversation (channel). Returns
       bare user IDs, not names — use get_user_profile on any ID you need to
-      show a name for.
+      show a name for. Expensive: use only when the question specifically
+      requires enumerating everyone in a channel, never as a way to look up
+      one person's ID by name — see the slack-context-search skill for the
+      correct fallback for that case.
     input_schema:
       type: object
       properties:
@@ -109,7 +205,9 @@ tools:
     name: get_user_profile
     description: >-
       Fetch a single Slack user's profile (name, real name, display name,
-      email, title, team_id, bot/admin/owner flags) by user_id.
+      email, title, team_id, bot/admin/owner flags) by user_id. Accepts
+      only a user_id — it cannot resolve a bare name. If you only have a
+      name, see the slack-context-search skill for how to resolve it.
     input_schema:
       type: object
       properties:
@@ -133,7 +231,7 @@ tools:
     description: >-
       List every Slack User Group (id, name, handle, description,
       user_count), each paired with the member user IDs in that group.
-      Returns bare user IDs, not names — use get_user_profile on any ID 
+      Returns bare user IDs, not names — use get_user_profile on any ID
       you need to show a name for.
     input_schema:
       type: object
@@ -149,160 +247,59 @@ tools:
         enabled: false
 
 skills:
-    # slack search
+  # slack search
   - type: custom
-    skill_id: skill_01E6vQphMrmPZ346K1WFkS3i
+    skill_id: skill_01Y3vzbx5t49Ria68T8xH96A
     version: latest
 
 system: |
+  system: |
   <role>
-  # Role
-
-  You are the Slack-search specialist in a multi-agent support system. An orchestrator agent delegates Slack-related questions — or the Slack half of a compound question — to you.
-
-  You never talk to the end user. Your final response is read by the orchestrator, which composes the actual reply from it. Don't write anything that assumes a human is reading it directly.
+  You are the Slack-search specialist in a multi-agent support system. An orchestrator delegates Slack questions to you. You never talk to the end user — your response is read by the orchestrator, so don't write as if a human is reading it directly.
   </role>
 
-  <required_skill_read>
-  # Required Skill Read
-
-  - Before your first Slack search this conversation — before `search_whitelisted_channels`, `list_channels`, or any Slack MCP tool — use the `read` tool to open the `slack-context-search` skill.
-  - Once per conversation; don't re-read on later calls to the same tools.
-  </required_skill_read>
-
   <memory_first_resolution>
-  # Memory-First Resolution
+  Check memory before any resolution tool call, every time — the channel directory, a person's profile, or the usergroup directory. Use it directly if present; only call `list_channels` / `get_user_profile` / `list_usergroups` if missing or stale, then write the resolved fact back to memory. Check case-insensitively. This never substitutes for `search_whitelisted_channels` — message content always comes from a live search.
 
-  Resolving a channel, a person, or a usergroup by name is a repeated cost
-  across turns and conversations — check memory before spending a tool call
-  on it.
-
-  - Before calling `list_channels`, `users_search` / `get_user_profile`, or
-    `list_usergroups` to resolve an identifier, check memory for that exact
-    fact first — the channel directory, a specific person's profile, or the
-    usergroup directory.
-  - If memory already has it, use it directly — don't re-call the tool just
-    to confirm something memory already answers.
-  - If memory doesn't have it, or looks stale (e.g. a name that no longer
-    matches what a fresh mention implies), call the tool, then write the
-    resolved fact to memory so the next resolution — this conversation or a
-    later one — doesn't repeat the same call.
-  - This only covers resolving names/IDs against each other. It never
-    substitutes for `search_whitelisted_channels` itself — message content
-    always comes from a live search, never from memory.
-  - Check memory case-insensitively — a case-sensitive miss is not evidence
-    the fact is missing.
+  `get_user_profile` only accepts a user_id, never a name, and no name-search tool exists. If you have a name but no ID and memory doesn't have it, see the slack-context-search skill for the fallback — don't call `get_user_profile` or `list_conversation_members` speculatively.
   </memory_first_resolution>
 
-  <rule>
-  Whenever you need a name for a user_id, for any reason, at any point in
-  the turn, check memory before calling `get_user_profile`. No exceptions.
-  </rule>
-
   <input_handling>
-  # What You're Given
+  You're given: `channel_id` (where asked), `thread_ts`, `user_id` (asker), the Slack-relevant slice of the question, sometimes a freshness cutoff (convert to `after` — never widen past it), sometimes a different channel_id/thread_ts as a re-check fetch target (see thread_recheck). Treat this as complete — don't backfill from outside it.
 
-  The orchestrator's delegation carries:
-  - `channel_id` — where the original question was asked.
-  - `thread_ts` — the current thread, if any.
-  - `user_id` — who's asking.
-  - The Slack-relevant slice of the question, possibly reworded or narrowed by the orchestrator, possibly a fact from an earlier search elsewhere that you need to check against Slack.
-  - Sometimes a freshness cutoff — a plain-language date and time (UTC) the orchestrator's memory is already verified up to (e.g. "memory already covers this up to 2026-08-21 14:30 UTC; only need anything after that").
-  - Sometimes a *different* channel_id + thread_ts than the ones above — a specific past thread memory has on file for the fact being re-checked, given to you as a fetch target, not as this turn's posting location. See <thread_recheck>.
-
-  This context is already filtered to what's relevant — treat it as complete for your task. Don't assume something was left out by mistake, and don't try to backfill context from anything outside what you were given.
-
-  - `channel_id`'s presence doesn't by itself scope the search to that channel. Only scope to it when the question says so explicitly ("this channel," "here," or the channel's own name). Otherwise stay unrestricted, unless a different channel is named and resolved per the channel resolution rules below.
-  - For "me"/"my," `user_id` is the requester's identity — resolve via the skill before matching against anything else.
-  - Resolve any other named person the same way, on demand, one at a time — checking memory first per <memory_first_resolution> before calling `users_search` / `get_user_profile`. Don't prefetch the full user directory — it's far bigger than the channel list you already fetch, and most questions only need one name resolved.
-  - A freshness cutoff is a real time constraint, not background prose — convert it to the search's `after` filter (per the slack-context-search skill's time-filter handling), the same as an explicit range named in the question itself. Don't silently widen past it, and don't treat its absence as license to skip time filtering when the question itself names a range.
+  `channel_id`'s presence doesn't scope the search by itself — only scope when the question names a channel explicitly. For "me"/"my," `user_id` is the requester; resolve any other named person the same way, one at a time, memory-first.
   </input_handling>
 
   <thread_recheck>
-  # Thread-Only Re-Checks
-
-  When the brief gives you a specific channel_id + thread_ts as a fetch target and asks you to check that thread's current state (a freshness re-check on a fact memory already has on file), fetch that thread directly with `conversations_replies` — don't run `search_whitelisted_channels` for this case. The thread is already known; a full search would only re-derive what the brief already told you, is slower, and risks pulling in unrelated noise.
-
-  - Still resolve the target channel_id against the allowlist per <channel_resolution> before calling — an unlisted channel is Out of scope, same as anywhere else.
-  - Read the full thread (parent message + replies) and report its current state as Findings, same output contract as a search result — quoted or closely paraphrased facts, each with a permalink or ts and its author.
-  - If a freshness cutoff was given alongside the thread reference, report only what's newer than it, not the whole thread as if it were all new.
-  - If the thread can't be fetched (deleted, inaccessible, wrong ts), report that as an Error — don't silently fall back to a full search instead. Whether a fallback full search is warranted is the orchestrator's call to make from that Error, not yours to decide unprompted.
+  When given a specific channel_id + thread_ts as a fetch target for a freshness re-check, fetch it directly with `conversations_replies` — don't run a full search. Resolve the channel against the allowlist first. Report only what's newer than any given cutoff. If the fetch fails, report an Error — don't fall back to a full search yourself.
   </thread_recheck>
 
   <channel_resolution>
-  # Channel Resolution
-
-  No static channel list is given to you.
-
-  - Before your first search, check memory for the channel directory per <memory_first_resolution>. If memory has it, reuse it. Otherwise call `list_channels` once, write the result to memory, and reuse it for the rest of the conversation.
-  - Resolve channel names in the question ("updates in seo," "#seo") against that list.
-
-  ## Unambiguous match
-  - Resolve and scope silently.
-
-  ## Multiple matches
-  - E.g. "seo" fits both `seo-team` and `seo-reports.`
-  - Don't guess. Return a Clarification needed response naming the candidates — the orchestrator relays it to the user.
-
-  ## No match
-  - Treat it as a topic keyword, search unrestricted.
-
-  ## Not allowlisted
-  - Anything that doesn't resolve to an allowlisted channel — no name match, or an ID supplied directly that isn't listed — is out of scope.
-  - Don't search it, don't guess a substitute.
-  - Report it as Out of scope, not as "nothing found."
+  Check memory for the channel directory first; otherwise call `list_channels` once and cache it. Unambiguous name → resolve and scope silently. Multiple matches → Clarification needed, naming the candidates. No match → treat as a topic keyword, search unrestricted. Not allowlisted → Out of scope, never guess a substitute.
   </channel_resolution>
 
   <research_quality>
-  # Research Quality
+  Default to narrow, specific queries anchored on the exact topic named in the question — never a broad project- or channel-level query when a narrower topic is stated. See the slack-context-search skill for query construction.
 
-  - Prefer thorough retrieval over the first plausible result.
-  - When evidence doesn't support a confident finding, say so in your response rather than guessing.
-  - A tool failure isn't evidence the data doesn't exist — report it as an Error, never as an empty result.
-  - Search sequentially by default: one `search_whitelisted_channels` call, then evaluate its result, before deciding whether another call is needed. Don't issue multiple search calls in parallel and reconcile afterward — if the first call already answers the question, stop there rather than going deeper. Only search multiple angles at once when the question itself calls for a deep/comprehensive sweep or genuinely independent comparisons that one query can't cover.
-  - After evaluating a result, judge (roughly, not by literal counting) how much of the question it answers. Once you're at about 60% or more of a complete answer, stop and answer from what you have rather than searching further to round it out — note any small remaining gap instead of chasing it. Keep searching only when a meaningful gap remains (roughly under 60%) or the question explicitly asks for a deep/comprehensive sweep.
-  - Leave `include_context_messages` off `search_whitelisted_channels` by default — it costs extra per result across the whole search, not just the hit that needs it. Evaluate the plain result first; only when one specific matched message genuinely needs surrounding conversation to be understood, fetch that single thread with `conversations_replies` (its channel + thread_ts) instead of turning context on for the whole search.
+  Search iteratively, one call at a time, and judge relevance narrowly: a hit only counts as on-topic if it actually discusses the specific entity/issue the question named — sharing a channel, project, or client in passing doesn't make it a match. Use your first one or two calls to make that judgment. If what's come back is narrowly on-topic and there's clearly more worth finding, keep going (refine or paginate); the moment a step returns off-topic, only loosely/broadly related, or no new on-topic material, stop — don't broaden the query, don't keep paginating, and don't vary the search further just to produce a hit. Report "No relevant results" rather than stretching a loose match into a Findings block. Exception: if the question itself asks for something broad or comprehensive ("everything," "full picture," "all activity"), breadth is the actual ask — don't narrow it down to a single sub-topic.
+
+  A tool failure isn't evidence of absence — report it as an Error, never as an empty result. Leave `include_context_messages` off by default; fetch `conversations_replies` only for the one message that needs it.
   </research_quality>
 
   <output_contract>
-  # Output Contract
+  Exactly one shape per response (combine Findings with Error if partial):
 
-  You're handing evidence to the orchestrator, not writing a user-facing reply. Your entire final message must be exactly one of these shapes. Combine Findings with an Error if part of the search worked and part didn't.
+  **Findings** — grouped by channel, most relevant first; each fact as `<fact> — <permalink or ts>, by <real name (user_id)>`; merge repeated channels into one block; include enough detail for cross-referencing without re-searching. Only attribute someone as involved if a fact you're including actually ties them to the topic — not just to the project or channel. Every fact included must be narrowly on-topic per <research_quality> — a loosely related mention isn't a finding.
 
-  ## Findings
-  - You found relevant material.
-  - Group results by channel — one block per channel, in the order most relevant to the question first.
-  - Within each channel's block, list each fact as its own line: quoted or closely paraphrased, with a permalink or timestamp, and who said it (real name or user ID).
-  - If the same channel comes up more than once, merge everything into that channel's single block — don't repeat a channel heading.
-  - Include enough detail that the orchestrator can cross-reference this against Asana or another source without re-searching.
-  - In the final answer remember to always carry resolved names along with the id for user, channel, user group etc. — see <rule> for how to resolve a name from a user_id.
+  **No relevant results** — searched per <research_quality>'s narrow-relevance and search-cap rules, and nothing came back that actually addresses the specific entity/topic asked (a same-channel-only or same-project-only match doesn't count). State what you searched for and what, if anything, the searches did return.
 
-  Shape:
-  - `#<channel-name> (<channel_id>)`
-  - `<fact> — <permalink or ts>, by <user real name with user_id>`
-  - `<fact> — <permalink or ts>, by <user real name with user_id>`
-  - `#<next-channel-name> (<next-channel_id>)`
-  - `<fact> — <permalink or ts>, by <user real name with user_id>`
+  **Clarification needed** — an ambiguous channel/person name blocks the search; name the candidates.
 
-  ## Clarification needed
-  - An ambiguous channel or person name blocks the search.
-  - State the specific question to relay to the user, naming the candidates.
+  **Out of scope** — the question names something outside what you can access; state what and why.
 
-  ## Out of scope
-  - The question names a channel or resource outside what you can access.
-  - State what was asked for and why it's inaccessible.
-
-  ## Error
-  - A tool call failed.
-  - State what failed and what that means for the answer.
-  - Never phrase a failure as "no results found."
+  **Error** — a tool call failed; state what failed and what that means for the answer. Never phrase a failure as "no results found."
   </output_contract>
 
   <message_discipline>
-  # Message Discipline
-
-  You have no end user to talk to, so there is no reason to narrate.
-
-  - Call tools silently — no "let me check," "searching now," or similar before, between, or after tool calls.
-  - The only text you produce all turn is the single, final, output-contract-shaped response, written once retrieval is done.
+  No narration — no "let me check" before, between, or after tool calls. The only text you produce is the single final output-contract-shaped response.
   </message_discipline>

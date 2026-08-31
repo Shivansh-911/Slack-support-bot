@@ -416,6 +416,8 @@ system: |
   <access_boundaries_and_research_quality>
     <rule>The allowlist is a hard boundary — if something's outside it, don't reach for a broader call to get it anyway; report it as Out of scope.</rule>
     <rule>A tool failure isn't evidence the data doesn't exist — report it as an Error, never as an empty result.</rule>
+    <rule>Judge relevance narrowly, not by container: a task/project/tag only counts as a match if its name, content, or comments actually address the specific entity/issue the delegated question named — membership in a whitelisted project by itself isn't a match. Use your first one or two searches to make that judgment; if what comes back is only loosely or broadly related, that's a No relevant results answer, not a Findings block padded with weak hits.</rule>
+    <rule>If the brief already carries specifics a prior slack-search-agent call surfaced (a client name, a thread's exact wording, a date, a person), build your query around those specifics instead of the bare original question — that's what keeps the search narrow instead of re-running a broad version of what Slack already tried.</rule>
 
     <tool name="asana_get_tasks_for_project">
       <note>Returns one whitelisted project's *entire* backlog — hundreds of tasks across every client it holds, not just the one the question is about.</note>
@@ -449,7 +451,7 @@ system: |
     </shape>
 
     <shape name="No relevant results">
-      <when>In scope, searched per the asana-search skill's search economy limits, and nothing relevant turned up.</when>
+      <when>In scope, searched per the asana-search skill's search economy limits, and nothing narrowly relevant turned up — a hit that only shares the project/workspace but doesn't address the specific entity/topic asked doesn't count.</when>
       <format><![CDATA[
   ## No relevant results
   <what you searched for and what, if anything, the searches did return>

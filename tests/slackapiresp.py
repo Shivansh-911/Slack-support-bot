@@ -13,25 +13,27 @@ class SlackAPI:
         # module-level import of an `agent.*` package would fail before that
         # guard ever executes.
         from agent.services.slack.formatter.slack_search_result_formatter import SlackSearchResultFormatter
+        
 
         channel_list = "in:<#C03E3P80CDV> OR in:<#C03EBMTEC14> OR in:<#C03F83XPEJU> OR in:<#C04AFL2GECE> OR in:<#C04AZRNAW7L> OR in:<#C05J50UV99R> OR in:<#C07RF9Y304S> OR in:<#C0APS04G7DM> OR in:<#C0B3LET9YQ4> OR in:<#C0BJN116WQ5>  OR in:<#C0BM44A3YCW>"
-        user_query = "crictoday on development"
-        # query = "developement on crictoday in:<#C04AZRNAW7L>"
-        query = f'{user_query} {channel_list}'
+        # user_query = "crictoday on development"
+        query = "developement on crictoday in:#seo   from:<@U05KG4KQQBY> from:@devashish"
+        # query = "cache tags"
+        # query = f'{query} {channel_list}'
         action_token = None
         channel_types = ['public_channel','private_channel']
         content_types = ["messages"]
         include_bots = True
         include_deleted_users = True
         before = None
-        after = None
-        include_context_messages = True
+        after = None 
+        include_context_messages = False
         context_channel_id = None
         cursor = None
-        limit = 3
+        limit = 2
         sort = "score"
         sort_dir = "desc"
-        include_message_blocks = True
+        include_message_blocks = False
         highlight = False
         term_clauses = None
         modifiers = []
@@ -74,9 +76,8 @@ class SlackAPI:
         print("RAW RESULTS : ")
         print(response)
 
-        formatted = SlackSearchResultFormatter().format(response.data)
+        formatted = SlackSearchResultFormatter().format(response)
         print("\nFORMATTED RESULTS : ")
-        print(formatted)
 
         # print("MESSAGES : ")
         # print(messages)
@@ -130,7 +131,7 @@ class SlackAPI:
 
 
     def listchannels(self):
-        client = WebClient(token=settings.SLACK_BOT_TOKEN)
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
         mapping = {}
         cursor = None
         try:
@@ -140,13 +141,13 @@ class SlackAPI:
                     limit=200,
                     cursor=cursor,
                 )
-                for channel in response.get('channels', []):
-                    name = channel.get('name')
-                    channel_id = channel.get('id')
-                    if name and channel_id:
-                        if channel_id == 'C0BJV4LF6N7':
+                for channel_resp in response.get('channels', []):
+                    name = channel_resp.get('name')
+                    channel = channel_resp.get('id')
+                    if name and channel:
+                        if channel == 'C03F83XPEJU' or channel == 'C04AFL2GECE' or channel == 'C0APS04G7DM' or channel == 'C0B3LET9YQ4' or channel == 'C0BJN116WQ5' or channel == 'C0BJV4LF6N7' or channel == 'C0BM44A3YCW':
                             continue
-                        mapping[channel_id] = name
+                        mapping[channel] = name
                 cursor = response.get('response_metadata', {}).get('next_cursor')
                 if not cursor:
                     break
@@ -177,17 +178,30 @@ class SlackAPI:
             pass
 
     def list_channel_members(self):
+        channel_id = "C03EBMTEC14"
+        from agent.services.slack.formatter.slack_channel_members_formatter import SlackChannelMembersFormatter
         client = WebClient(token=settings.SLACK_USER_TOKEN)
+        cursor = None
+        response_data = []
         try:
-            response = client.conversations_history(channel="C04GJCY2ENA",limit=1)
-            return response
-        except SlackApiError:
-            pass
+            while True:
+                response = client.conversations_members(channel=channel_id, cursor=cursor, limit=2)
+                response_data.extend(response.get('members'))
+                cursor = response.get('response_metadata', {}).get('next_cursor')
+                if not cursor:
+                    break
+        except SlackApiError as error:
+            return {'error': f'Slack request failed: {error}'}
+        print(response_data)
+        formatted = SlackChannelMembersFormatter().format(response_data)
+        print("\nFORMATTED RESULTS : ")
+        return formatted
+
 
     def list_conversation(self):
         client = WebClient(token=settings.SLACK_USER_TOKEN)
         try:
-            response = client.conversations_history(channel="C07RF9Y304S",limit=5)
+            response = client.conversations_history(channel="C0APS04G7DM",oldest="1787529600",latest="1787643847.078429")
             return response
         except SlackApiError:
             pass
@@ -219,7 +233,7 @@ class SlackAPI:
 
 
     def main(self):
-        return self.fetch()
+        return self.listchannels()
 
 
 if __name__ == "__main__":

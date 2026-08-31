@@ -6,7 +6,7 @@ model: claude-haiku-4-5
 #     name: slack
 #     url: https://slack-mcp-server-production-9996.up.railway.app/sse
 
-mcp_servers: {}
+mcp_servers: []
 
 tools:
   - type: custom
@@ -115,73 +115,73 @@ tools:
             ticket IDs, identifiers.
       required: [query]
 
-  # - type: custom
-  #   name: conversations_history
-  #   description: >-
-  #     Get messages from a channel (or DM) by channel — most recent first.
-  #     When the reply's next_cursor is non-empty, more messages exist; pass
-  #     it back as cursor to fetch the next page. Don't set cursor together
-  #     with oldest/latest on the same call — paginate with cursor alone once
-  #     you've started.
-  #   input_schema:
-  #     type: object
-  #     properties:
-  #       channel:
-  #         type: string
-  #         description: >-
-  #           Channel ID to fetch history from (must be whitelisted). Resolve
-  #           a name to an ID first — see the slack-context-search skill.
-  #       cursor:
-  #         type: string
-  #         description: Pagination cursor from a previous call's next_cursor.
-  #       oldest:
-  #         type: integer
-  #         description: Only messages after this Unix timestamp (inclusive).
-  #       latest:
-  #         type: integer
-  #         description: Only messages before this Unix timestamp (inclusive).
-  #     required:
-  #       - channel
+  - type: custom
+    name: conversations_history
+    description: >-
+      Get messages from a channel (or DM) by channel — most recent first.
+      When the reply's next_cursor is non-empty, more messages exist; pass
+      it back as cursor to fetch the next page. Don't set cursor together
+      with oldest/latest on the same call — paginate with cursor alone once
+      you've started.
+    input_schema:
+      type: object
+      properties:
+        channel:
+          type: string
+          description: >-
+            Channel ID to fetch history from (must be whitelisted). Resolve
+            a name to an ID first — see the slack-context-search skill.
+        cursor:
+          type: string
+          description: Pagination cursor from a previous call's next_cursor.
+        oldest:
+          type: integer
+          description: Only messages after this Unix timestamp (inclusive).
+        latest:
+          type: integer
+          description: Only messages before this Unix timestamp (inclusive).
+      required:
+        - channel
 
-  # - type: custom
-  #   name: conversations_replies
-  #   description: >-
-  #     Get a thread's messages (parent + replies) by channel and thread_ts.
-  #     When the reply's next_cursor is non-empty, more messages exist; pass
-  #     it back as cursor to fetch the next page. Don't set cursor together
-  #     with oldest/latest on the same call — paginate with cursor alone once
-  #     you've started.
-  #   input_schema:
-  #     type: object
-  #     properties:
-  #       channel:
-  #         type: string
-  #         description: >-
-  #           Channel ID the thread lives in (must be whitelisted). Resolve a
-  #           name to an ID via list_channels first — this tool doesn't
-  #           accept a #name or @user.
-  #       thread_ts:
-  #         type: string
-  #         description: >-
-  #           Timestamp (format 1234567890.123456) of the thread's parent
-  #           message, or of any message in the thread.
-  #       include_activity_messages:
-  #         type: boolean
-  #         description: >-
-  #           If true, include activity messages such as channel_join or
-  #           channel_leave. Default false.
-  #       cursor:
-  #         type: string
-  #         description: Pagination cursor from a previous call's next_cursor.
-  #       oldest:
-  #         type: integer
-  #         description: Only messages after this Unix timestamp (inclusive).
-  #       latest:
-  #         type: integer
-  #         description: Only messages before this Unix timestamp (inclusive).
-  #     required:
-  #       - channel
-  #       - thread_ts
+  - type: custom
+    name: conversations_replies
+    description: >-
+      Get a thread's messages (parent + replies) by channel and thread_ts.
+      When the reply's next_cursor is non-empty, more messages exist; pass
+      it back as cursor to fetch the next page. Don't set cursor together
+      with oldest/latest on the same call — paginate with cursor alone once
+      you've started.
+    input_schema:
+      type: object
+      properties:
+        channel:
+          type: string
+          description: >-
+            Channel ID the thread lives in (must be whitelisted). Resolve a
+            name to an ID via list_channels first — this tool doesn't
+            accept a #name or @user.
+        thread_ts:
+          type: string
+          description: >-
+            Timestamp (format 1234567890.123456) of the thread's parent
+            message, or of any message in the thread.
+        include_activity_messages:
+          type: boolean
+          description: >-
+            If true, include activity messages such as channel_join or
+            channel_leave. Default false.
+        cursor:
+          type: string
+          description: Pagination cursor from a previous call's next_cursor.
+        oldest:
+          type: integer
+          description: Only messages after this Unix timestamp (inclusive).
+        latest:
+          type: integer
+          description: Only messages before this Unix timestamp (inclusive).
+      required:
+        - channel
+        - thread_ts
 
   - type: custom
     name: list_conversation_members

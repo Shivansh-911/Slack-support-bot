@@ -403,7 +403,8 @@ system: |
     <workspace_gid>1203355867603831</workspace_gid>
     <project_gids>
       <project_gid>1211134942672045</project_gid>
-      <!-- may hold one entry or several -->
+      <project_gid>1211120697187537</project_gid>
+      <project_gid>1210261480727552</project_gid>
     </project_gids>
 
     <rules>

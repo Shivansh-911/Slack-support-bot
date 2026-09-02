@@ -120,7 +120,7 @@ class SlackAPI:
 
         try:
             response = client.users_info(
-                user= 'U0B7C6RBUD8'
+                user= 'U09C5EQRMS4'
             )
         except Exception as error:
             return {"error": f"Slack search failed: {error}"}
@@ -233,7 +233,7 @@ class SlackAPI:
 
 
     def main(self):
-        return self.listchannels()
+        return self.userinfo()
 
 
 if __name__ == "__main__":

@@ -4,9 +4,9 @@ multiagent:
   type: coordinator
   agents:
     - type: agent
-      id: agent_011G41LFZm4xuoAxvvXcvKrY
+      id: agent_011G41LFZm4xuoAxvvXcvKrY  # asana-search-agent
     - type: agent
-      id: agent_017SA4Qo9yyo2t2PZ2h4kkMd
+      id: agent_017SA4Qo9yyo2t2PZ2h4kkMd  # slack-search-agent
 
 mcp_servers: []
 tools:

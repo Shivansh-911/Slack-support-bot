@@ -8,13 +8,19 @@ model: claude-haiku-4-5
 # `answering` skill and no Slack tools: composing the final user-facing
 # reply and cross-source classification both live on the orchestrator.
 #
-# The 18 read-only Asana tools below mirror roychri/mcp-server-asana's tool
+# The 17 read-only Asana tools below mirror roychri/mcp-server-asana's tool
 # set one-for-one by name and purpose, copied verbatim from cma/agent.yaml's
 # Asana half. Every one of them enforces constants.WHITELISTED_ASANA_WORKSPACES /
 # WHITELISTED_ASANA_PROJECTS itself before ever calling Asana — see
 # cma/agent.yaml's own comment block for the per-tool breakdown of how each
-# one resolves and checks scope. Write tools (create/update/delete/complete/
-# comment/move) are not implemented at all.
+# one resolves and checks scope. asana_get_project_status is deliberately not
+# exposed here: Asana's `/project_statuses/{gid}` record carries no project/
+# workspace reference, so there's nothing for the code to check against the
+# whitelist for that one gid — see agent/services/asana/asana_get_project_status_service.py's
+# docstring. Its tool definition and dispatch wiring have been pulled out of
+# the agent run pending a session-scoped fix; the backend service itself is
+# untouched. Write tools (create/update/delete/complete/comment/move) are not
+# implemented at all.
 
 tools:
   - type: custom
@@ -203,25 +209,6 @@ tools:
         - task_gids
 
   - type: custom
-    name: asana_get_project_status
-    description: >-
-      Get one project status update by its own gid. Asana's project-status
-      record carries no project/workspace reference of its own, so this is the
-      one tool in this set with no code-level whitelist check — only call it on
-      a status gid already returned by a whitelist-checked
-      asana_get_project_statuses call, never on a bare gid from anywhere else.
-    input_schema:
-      type: object
-      properties:
-        project_status_gid:
-          type: string
-          description: >-
-            A project-status gid, obtained from a prior asana_get_project_statuses
-            call on a whitelisted project — never pass one from another source.
-      required:
-        - project_status_gid
-
-  - type: custom
     name: asana_get_project_statuses
     description: >-
       List a project's status updates. Requires a whitelisted project_gid.
@@ -381,9 +368,6 @@ tools:
 
 skills:
     # asana skill
-  # - type: custom
-    # skill_id: skill_01LkxXWD9Ftota86BEj7uBby
-    # version: latest
   - type: custom
     skill_id: skill_01SE8jjoFCDJYgQ5v11ADw7i
     version: latest
@@ -402,9 +386,7 @@ system: |
   <allowlist>
     <workspace_gid>1203355867603831</workspace_gid>
     <project_gids>
-      <project_gid>1211134942672045</project_gid>
-      <project_gid>1211120697187537</project_gid>
-      <project_gid>1210261480727552</project_gid>
+      see from the memory
     </project_gids>
 
     <rules>

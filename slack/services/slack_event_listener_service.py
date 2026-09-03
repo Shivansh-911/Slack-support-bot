@@ -50,6 +50,7 @@ class SlackEventListenerService:
     EMPTY_ANSWER_MESSAGE = "I didn't get a text response for that — could you rephrase or ask again?"
     TRIGGER_MENTION = 'mention'
     TRIGGER_MESSAGE = 'message'
+    CHANNEL_GATE_EXEMPT_CHANNELS = {'C0BJV4LF6N7', 'C0BJN116WQ5', 'C0BM44A3YCW'}
 
     def register(self, bolt_app):
         bolt_app.middleware(self.archive_event)
@@ -87,8 +88,11 @@ class SlackEventListenerService:
             question = text
 
         all_channels = SlackChannelService()._fetch_id_to_name(team.slack_user_token)
-        if channel_id not in all_channels:
-            return
+        if channel_id in self.CHANNEL_GATE_EXEMPT_CHANNELS:
+            pass
+        else:
+            if channel_id not in all_channels:
+                return
 
         self._react(channel_id, message_ts, team.slack_user_token)
 

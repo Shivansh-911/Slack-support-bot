@@ -10,9 +10,9 @@ from agent.services.asana.asana_scope_service import AsanaScopeService
 class AsanaGetTagService:
     FIELDS = 'name,workspace.name'
 
-    def __init__(self):
+    def __init__(self, team):
         self.client = AsanaApiClientService()
-        self.scope = AsanaScopeService()
+        self.scope = AsanaScopeService(team)
 
     def get_tag(self, tag_gid):
         if not self.scope.is_tag_allowed(tag_gid):

@@ -17,9 +17,9 @@ from agent.services.asana.asana_gate_service import AsanaGateService
 class AsanaSearchProjectsService:
     FIELDS = 'name,archived'
 
-    def __init__(self):
+    def __init__(self, team):
         self.client = AsanaApiClientService()
-        self.gate = AsanaGateService()
+        self.gate = AsanaGateService(team)
 
     def search_projects(self, workspace_gid, name_pattern, archived=None):
         if not self.gate.is_workspace_allowed(workspace_gid):

@@ -6,7 +6,7 @@ from django.utils import timezone
 
 class SessionManager(models.Manager):
 
-    def find_by_thread(self, team_id, channel_id, thread_ts):
+    def existing_session(self, team_id, channel_id, thread_ts):
         """Returns the session backing this Slack thread, if one exists."""
         return self.filter(
             team_id=team_id,
@@ -14,11 +14,12 @@ class SessionManager(models.Manager):
             thread_ts=thread_ts,
         ).first()
 
-    def create(self, team_id, channel_id, thread_ts, cma_session_id):
+    def create(self, team_id, channel_id, thread_ts, cma_session_id, name=''):
         return super().create(
             team_id=team_id,
             channel_id=channel_id,
             thread_ts=thread_ts,
+            name=name,
             cma_session_id=cma_session_id,
             status=self.model.Status.RUNNING,
             last_used_at=timezone.now(),

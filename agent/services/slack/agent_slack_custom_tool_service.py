@@ -4,7 +4,10 @@
 Dispatches `agent.custom_tool_use` events by tool name to the service that
 actually runs them. Mirrors AgentAsanaCustomToolService's shape: one
 `_handle_*` method per tool, each pulling its own fields off `event.input`
-explicitly and passing them by name.
+explicitly and passing them by name. Every underlying Slack call goes out
+under this instance's own team's seat token — the team this instance was
+built with is fixed for its whole lifetime, so there is no way for one
+team's tool call to run under another team's identity.
 
 Every tool's single-channel field is named `channel` by convention, so
 `handle_custom_tool_use` gates it once, here, against the run's channel
@@ -40,7 +43,8 @@ class AgentslackCustomToolService:
     ADD_REACTION_EMOJI = '-1::skin-tone-4'
     CHANNEL_GATE_EXEMPT_TOOLS = {'add_reaction'}
 
-    def __init__(self):
+    def __init__(self, team):
+        self.team = team
         self._handlers = {
             'search_whitelisted_channels': self._handle_search,
             'conversations_history': self._handle_conversations_history,
@@ -78,11 +82,9 @@ class AgentslackCustomToolService:
         if context_channel_id and context_channel_id not in channel_mapping:
             return self._reply(event, {'error': f'Channel {context_channel_id} is not whitelisted.'})
 
-        result = SlackChannelSearchAssistantService().search(
+        result = SlackChannelSearchAssistantService(self.team.slack_user_token).search(
             query=event.input.get('query'),
             channel_ids=channel_ids,
-            # exclude_channel_ids=event.input.get('exclude_channel_ids'),
-            # action_token=event.input.get('action_token'),
             users_from=event.input.get('users_from'),
             include_bots=event.input.get('include_bots', False),
             include_deleted_users=event.input.get('include_deleted_users', False),
@@ -91,18 +93,12 @@ class AgentslackCustomToolService:
             include_context_messages=event.input.get('include_context_messages'),
             context_channel_id=context_channel_id,
             cursor=event.input.get('cursor'),
-            # sort=event.input.get('sort'),
             sort_dir=event.input.get('sort_dir'),
-            # include_message_blocks=event.input.get('include_message_blocks'),
-            # highlight=event.input.get('highlight'),
             term_clauses=event.input.get('term_clauses'),
-            # modifiers=event.input.get('modifiers'),
-            # include_archived_channels=event.input.get('include_archived_channels'),
             disable_semantic_search=event.input.get('disable_semantic_search', False),
             channel_mapping=channel_mapping
         )
-        formated_text =SlackSearchResultFormatter().format(result)
-        print(formated_text)
+        formated_text = SlackSearchResultFormatter().format(result)
         return self._reply(event, result, formated_text, out_of_scope)
 
     def _handle_conversations_history(self, event, channel_mapping):
@@ -112,6 +108,7 @@ class AgentslackCustomToolService:
             cursor=event.input.get('cursor'),
             oldest=event.input.get('oldest'),
             latest=event.input.get('latest'),
+            slack_user_token=self.team.slack_user_token,
         )
         formated_text = SlackConversationHistoryFormatter().format(result)
         return self._reply(event, result, formated_text)
@@ -124,26 +121,27 @@ class AgentslackCustomToolService:
             cursor=event.input.get('cursor'),
             oldest=event.input.get('oldest'),
             latest=event.input.get('latest'),
+            slack_user_token=self.team.slack_user_token,
         )
         formated_text = SlackConversationRepliesFormatter().format(result)
         return self._reply(event, result, formated_text)
 
     def _handle_list_conversation_members(self, event, channel_mapping):
-        result = SlackChannelMembersService().members(event.input.get('channel'))
+        result = SlackChannelMembersService().members(event.input.get('channel'), self.team.slack_user_token)
         formated_text = SlackChannelMembersFormatter().format(result)
         return self._reply(event, result, formated_text)
 
     def _handle_get_user_profile(self, event, channel_mapping):
-        result = SlackUserProfileService().get_user(event.input.get('user_id'))
+        result = SlackUserProfileService().get_user(event.input.get('user_id'), self.team.slack_user_token)
         return self._reply(event, result)
 
     def _handle_list_channels(self, event, channel_mapping):
-        mapping = SlackChannelService()._fetch_id_to_name()
+        mapping = SlackChannelService()._fetch_id_to_name(self.team.slack_user_token)
         result = [{'channel_id': channel_id, 'name': name} for channel_id, name in mapping.items()]
         return self._reply(event, result)
 
     def _handle_list_usergroups(self, event, channel_mapping):
-        result = SlackUserGroupsService().list_with_members()
+        result = SlackUserGroupsService().list_with_members(self.team.slack_user_token)
         return self._reply(event, result)
 
     def _handle_add_reaction(self, event, channel_mapping):
@@ -151,27 +149,22 @@ class AgentslackCustomToolService:
             channel_id=event.input.get('channel'),
             timestamp=event.input.get('timestamp'),
             emoji_name=self.ADD_REACTION_EMOJI,
+            slack_user_token=self.team.slack_user_token,
         )
         return self._reply(event, result)
 
-        
     def _reply(self, event, result, formated_text=None, out_of_scope=None):
         if isinstance(result, dict) and result.get('error'):
             return self._result(event, result['error'], is_error=True)
         if isinstance(result, list) and not result:
             return self._result(event, 'No results found.')
-        # A specific tool (e.g. search) can hand back a compact, flattened
-        # text block instead of raw JSON — see SlackSearchResultFormatter.
-        # Tools that don't pass one keep the default generic JSON dump.
         if formated_text is None:
-            print("not formatted")
             formated_text = json.dumps(result, indent=2, default=str)
         if out_of_scope:
             formated_text += f"\n\nNote: these channel_ids were not whitelisted and were excluded from the search: {', '.join(out_of_scope)}"
         return self._result(event, formated_text)
 
     def _result(self, event, text, is_error=False):
-        print(text)
         reply = {
             'type': 'user.custom_tool_result',
             'custom_tool_use_id': event.id,

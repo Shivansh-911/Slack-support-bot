@@ -16,9 +16,9 @@ class AsanaGetMultipleTasksByGidService:
     MAX_GIDS = 25
     FIELDS = 'name,completed,assignee.name,due_on,permalink_url'
 
-    def __init__(self):
+    def __init__(self, team):
         self.client = AsanaApiClientService()
-        self.scope = AsanaScopeService()
+        self.scope = AsanaScopeService(team)
 
     def get_multiple_tasks_by_gid(self, task_gids, opt_fields=None):
         if len(task_gids) > self.MAX_GIDS:

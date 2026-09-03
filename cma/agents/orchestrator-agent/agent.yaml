@@ -13,12 +13,14 @@ tools:
   - type: custom
     name: add_reaction
     description: >-
-      Add an emoji reaction to a Slack message, via Slack's reactions.add
-      (bot token, reactions:write scope). channel must be whitelisted. The
-      emoji used is fixed by the system, not chosen by you — this tool
-      always reacts with the same acknowledgment emoji. This is the only
-      Slack action you take directly — everything else is delegated to
-      slack-search-agent.
+      Add an emoji reaction to a Slack message, via Slack's reactions.add,
+      using this run's own team seat token. channel is not checked against
+      the channel whitelist — it acts on whatever channel/message the
+      triggering Slack event already named, not a destination you choose,
+      so it always succeeds there. The emoji used is fixed by the system,
+      not chosen by you — this tool always reacts with the same
+      acknowledgment emoji. This is the only Slack action you take
+      directly — everything else is delegated to slack-search-agent.
     input_schema:
       type: object
       properties:
@@ -58,16 +60,17 @@ system: |
   - `slack-search-agent` — Slack channels, threads, messages, users.
   - `asana-search-agent` — Asana tasks, projects, workspaces.
 
-  You never call Slack/Asana retrieval tools directly, never relay a subagent response verbatim, and never expose subagent output, memory operations, or internal delegation to the user. The one exception is `add_reaction`: a direct, bot-token action to acknowledge a message with an emoji, not a retrieval — see <direct_tools> below.
+  You never call Slack/Asana retrieval tools directly, never relay a subagent response verbatim, and never expose subagent output, memory operations, or internal delegation to the user. The one exception is `add_reaction`: a direct action, run under this turn's own team seat, to acknowledge a message with an emoji, not a retrieval — see <direct_tools> below.
   </role>
 
   <input_context>
   # Input Context
 
-  Requests will include Slack metadata:
-  - `channel_id`, `thread_ts`, `message_ts`, `user_id`, `trigger`, `current_datetime`, followed by the `<question>`
+  Every request opens with a Scope block, then Slack metadata, then the question:
+  - Scope block — `Allowed Slack channels` (this run's full channel_id→name whitelist for this team), `Allowed Asana workspace`, `Allowed Asana projects`. This is informational, not something you enforce yourself — slack-search-agent and asana-search-agent independently reject anything outside their own team's scope regardless of what you delegate. Use it to resolve a channel name the user mentions to its id, or to recognize up front that a named channel/project isn't in scope for this team, before delegating rather than after a specialist rejects it.
+  - Slack metadata — `channel_id`, `thread_ts`, `message_ts`, `user_id`, `trigger`, `current_datetime`, followed by the `<question>`.
 
-  This metadata is not part of the question.
+  Neither the Scope block nor the metadata is part of the question.
 
   - Only scope a question to the current channel if the user explicitly says so ("this channel," "here," the channel's name).
   - If another channel is named, use that one.

@@ -1,0 +1,15 @@
+[
+  {
+    "name": "support",
+    "slack_user_id": "U0xxxxxx7",
+    "slack_user_token": "xoxp-xxxxx",
+    "cma_memory_id": "memstore_xxxx",
+    "cma_instructions_memory_id": "memstore_xxxx",
+    "asana_workspace_gid": "1203355867603831",
+    "asana_project_gids": [
+      "1211134942672045",
+      "1211120697187537",
+      "1210261480727552"
+    ]
+  }
+]

@@ -2,14 +2,13 @@
 `GET /workspaces/{workspace_gid}/tasks/search`.
 
 Requires a whitelisted workspace_gid. This endpoint has no per-request project
-restriction of its own, so `projects.any` is always forced to
-WHITELISTED_ASANA_PROJECTS — narrowed further by an explicit `projects_any` argument if
-one is given and it doesn't name anything outside the whitelist. Premium-only and
-capped at 100 unstable-ordered results on Asana's side; prefer
+restriction of its own, so `projects.any` is always forced to the team's
+whitelisted projects — narrowed further by an explicit `projects_any` argument
+if one is given and it doesn't name anything outside the whitelist. Premium-only
+and capped at 100 unstable-ordered results on Asana's side; prefer
 `asana_get_tasks_for_project` for exhaustive, paginated listing on free plans.
 """
 
-from constants import WHITELISTED_ASANA_PROJECTS
 from agent.exceptions import AsanaApiError
 from agent.services.asana.asana_api_client_service import AsanaApiClientService
 from agent.services.asana.asana_gate_service import AsanaGateService
@@ -18,9 +17,10 @@ from agent.services.asana.asana_gate_service import AsanaGateService
 class AsanaSearchTasksService:
     FIELDS = 'name,assignee.name,completed,due_on,permalink_url'
 
-    def __init__(self):
+    def __init__(self, team):
+        self.team = team
         self.client = AsanaApiClientService()
-        self.gate = AsanaGateService()
+        self.gate = AsanaGateService(team)
 
     def search_tasks(
         self,
@@ -59,8 +59,8 @@ class AsanaSearchTasksService:
 
     def _scoped_projects(self, projects_any):
         if not projects_any:
-            return list(WHITELISTED_ASANA_PROJECTS)
-        return [gid for gid in projects_any if gid in WHITELISTED_ASANA_PROJECTS]
+            return list(self.team.asana_project_gids)
+        return [gid for gid in projects_any if gid in self.team.asana_project_gids]
 
 
 __all__ = ['AsanaSearchTasksService']

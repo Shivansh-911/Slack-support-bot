@@ -22,7 +22,7 @@ class AgentSessionCreateService:
             return None
         return session.id
 
-    def _create(self, client, channel_id, thread_ts):
+    def _create(self, client, channel_id, thread_ts, team):
         self._assert_configured()
         session = client.beta.sessions.create(
             agent=settings.CMA_AGENT_ID,
@@ -30,14 +30,14 @@ class AgentSessionCreateService:
             vault_ids=[settings.CMA_VAULT_ID] if settings.CMA_VAULT_ID else [],
             budget=self._budget(),
             title=self._title(channel_id, thread_ts),
-            resources=self._resources(),
+            resources=self._resources(team),
         )
         return session.id
 
-    def _resources(self):
+    def _resources(self, team):
         resources = []
 
-        if settings.CMA_SLACK_MEMORY_STORE_ID:
+        if team.cma_memory_id:
             # CMA_SLACK_MEMORY_STORE_ID => per-channel/per-user context files.
             # Mount path is NOT hardcoded here — CMA auto-injects the real
             # mount path, access mode, and this instructions text into the
@@ -45,10 +45,10 @@ class AgentSessionCreateService:
             # live path rather than one we guessed.
             resources.append({
                 'type': 'memory_store',
-                'memory_store_id': settings.CMA_SLACK_MEMORY_STORE_ID,
+                'memory_store_id': team.cma_memory_id,
                 'access': 'read_write',
                 'instructions': (
-                    "Holds durable facts about Slack channels and users. "
+                    "Holds durable facts about Slack channels, users, and Asana. "
                     "Before resolving a channel or user, check here first, "
                     "case-insensitively — reuse what's already recorded "
                     "instead of re-resolving from scratch. When new info "
@@ -57,46 +57,31 @@ class AgentSessionCreateService:
                 )
             })
 
-        if settings.CMA_WHITELISTED_CHANNELS:
-            # CMA_WHITELISTED_CHANNELS => single read-only allowlist file,
-            # channels.md, listing every Slack channel_id (and its name) this
-            # agent may access. Read at the start of every conversation.
-            resources.append({
-                'type': 'memory_store',
-                'memory_store_id': settings.CMA_WHITELISTED_CHANNELS,
-                'access': 'read_only',
-                'instructions': (
-                    "Contains a single file, channels.md, listing every Slack "
-                    "channel_id (and its name) this agent is allowed to "
-                    "access. "
-                    "1. Read it once at the start of every conversation, "
-                    "before the first Slack tool call. "
-                    "2. Before calling any Slack tool that takes a "
-                    "channel_id, confirm that id appears in this file first — "
-                    "if it doesn't, treat the channel as out of scope rather "
-                    "than calling the tool."
-                )
-            })
-
-        if settings.CMA_INSTRUCTIONS_MEMORY_STORE_ID:
+        if team.cma_instructions_memory_id:
             # CMA_INSTRUCTIONS_MEMORY_STORE_ID => standing instructions a user
             # has given the agent about how to behave and format answers.
             # Global to the whole workspace, not scoped to a channel or user.
             resources.append({
                 'type': 'memory_store',
-                'memory_store_id': settings.CMA_INSTRUCTIONS_MEMORY_STORE_ID,
+                'memory_store_id': team.cma_instructions_memory_id,
                 'access': 'read_write',
                 'instructions': (
                     "Holds standing instructions a user has given about how "
                     "you should behave and format answers in this workspace "
                     "— tone, response length, formatting, things to always "
                     "or never do. These apply globally, not to one channel "
-                    "or user. Read it before answering every message and "
-                    "shape your response accordingly. When someone gives you "
-                    "an instruction meant to apply going forward rather than "
-                    "just this once, write it here — update an existing "
-                    "entry in place if it conflicts with or refines one "
-                    "already recorded, rather than duplicating it."
+                    "or user. MANDATORY: read this store's full contents "
+                    "before writing your final answer to every single "
+                    "message you handle in this session, including every "
+                    "follow-up later in the same thread — not just the "
+                    "first message. Never skip this because you read it "
+                    "earlier in the session; standing instructions can be "
+                    "added or changed mid-thread and a stale read is a "
+                    "failure. When someone gives you an instruction meant "
+                    "to apply going forward rather than just this once, "
+                    "write it here — update an existing entry in place if "
+                    "it conflicts with or refines one already recorded, "
+                    "rather than duplicating it."
                 )
             })
 

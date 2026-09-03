@@ -22,7 +22,6 @@ the `search_whitelisted_channels` hallucination bug (mangled Python-repr
 JSON from a bare `json.dumps` fallback).
 """
 
-from django.conf import settings
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -37,10 +36,10 @@ class SlackConversationRepliesService:
         'pinned_item', 'unpinned_item',
     }
 
-    def replies(self, channel, thread_ts, include_activity_messages, cursor, oldest, latest):
+    def replies(self, channel, thread_ts, include_activity_messages, cursor, oldest, latest, slack_user_token):
         if not channel or not thread_ts:
             return {'error': 'channel and thread_ts are both required.'}
-        client = WebClient(token=settings.SLACK_USER_TOKEN)
+        client = WebClient(token=slack_user_token)
         params = {'channel': channel, 'ts': thread_ts, 'limit': self.PAGE_SIZE}
         if cursor:
             params['cursor'] = cursor

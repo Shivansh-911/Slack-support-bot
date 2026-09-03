@@ -13,9 +13,9 @@ from agent.services.asana.asana_gate_service import AsanaGateService
 class AsanaGetMyTasksService:
     FIELDS = 'name,completed,due_on,permalink_url'
 
-    def __init__(self):
+    def __init__(self, team):
         self.client = AsanaApiClientService()
-        self.gate = AsanaGateService()
+        self.gate = AsanaGateService(team)
 
     def get_my_tasks(self, workspace_gid, completed_since=None, opt_fields=None, limit=100):
         if not self.gate.is_workspace_allowed(workspace_gid):

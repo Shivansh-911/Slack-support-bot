@@ -10,9 +10,9 @@ from agent.services.asana.asana_gate_service import AsanaGateService
 class AsanaGetTagsForWorkspaceService:
     FIELDS = 'name'
 
-    def __init__(self):
+    def __init__(self, team):
         self.client = AsanaApiClientService()
-        self.gate = AsanaGateService()
+        self.gate = AsanaGateService(team)
 
     def get_tags_for_workspace(self, workspace_gid):
         if not self.gate.is_workspace_allowed(workspace_gid):

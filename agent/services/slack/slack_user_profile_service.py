@@ -1,16 +1,15 @@
 """Wraps Slack's `users.info` — a single user's profile by user_id."""
 
-from django.conf import settings
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 
 class SlackUserProfileService:
 
-    def get_user(self, user_id):
+    def get_user(self, user_id, slack_user_token):
         if not user_id:
             return {'error': 'user_id is required.'}
-        client = WebClient(token=settings.SLACK_USER_TOKEN)
+        client = WebClient(token=slack_user_token)
         try:
             response = client.users_info(user=user_id)
         except SlackApiError as error:

@@ -11,9 +11,9 @@ from agent.services.asana.asana_scope_service import AsanaScopeService
 class AsanaGetTaskStoriesService:
     FIELDS = 'resource_subtype,text,created_by.name,created_at'
 
-    def __init__(self):
+    def __init__(self, team):
         self.client = AsanaApiClientService()
-        self.scope = AsanaScopeService()
+        self.scope = AsanaScopeService(team)
 
     def get_task_stories(self, task_gid):
         if not self.scope.is_task_allowed(task_gid):

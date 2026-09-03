@@ -14,9 +14,9 @@ from agent.services.asana.asana_gate_service import AsanaGateService
 
 class AsanaListWorkspacesService:
 
-    def __init__(self):
+    def __init__(self, team):
         self.client = AsanaApiClientService()
-        self.gate = AsanaGateService()
+        self.gate = AsanaGateService(team)
 
     def list_workspaces(self):
         try:

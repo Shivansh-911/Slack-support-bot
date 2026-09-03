@@ -1,15 +1,22 @@
-"""Executes the 18 read-only Asana custom tools and builds the
+"""Executes the 17 read-only Asana custom tools and builds the
 `user.custom_tool_result` reply for each — the Asana counterpart to
 AgentCustomToolService, which delegates any tool name this class `handles()` to it.
 
 Kept as its own class (rather than folded into AgentCustomToolService alongside the
-Slack tools) because 18 handlers plus the Slack ones in one file would blow past a
+Slack tools) because 17 handlers plus the Slack ones in one file would blow past a
 single responsibility. Every successful result is rendered as indented JSON rather than
-a bespoke per-tool format — the shapes returned by these 18 endpoints vary too much
+a bespoke per-tool format — the shapes returned by these 17 endpoints vary too much
 (projects, tasks, tags, sections, statuses, stories, counts, workspaces) for one set of
 hand-written renderers to be worth the risk of a field-name mismatch; JSON is exact and
 still perfectly readable by the agent. Whitelist enforcement happens inside each service
-itself, before Asana is ever called, not here.
+itself, before Asana is ever called, not here — scoped to whichever team's row this
+instance was built with, so a single process serving many teams never mixes scopes.
+
+asana_get_project_status is intentionally not wired in here — its gid carries no
+project/workspace reference, so there's no code-level check to perform for it (see
+asana_get_project_status_service.py's docstring). The service class is left in the
+codebase untouched; only its dispatch entry point is removed, pending a session-scoped
+fix.
 """
 
 import json
@@ -23,7 +30,6 @@ from agent.services.asana.asana_get_project_service import AsanaGetProjectServic
 from agent.services.asana.asana_get_project_task_counts_service import AsanaGetProjectTaskCountsService
 from agent.services.asana.asana_get_project_sections_service import AsanaGetProjectSectionsService
 from agent.services.asana.asana_get_multiple_tasks_by_gid_service import AsanaGetMultipleTasksByGidService
-from agent.services.asana.asana_get_project_status_service import AsanaGetProjectStatusService
 from agent.services.asana.asana_get_project_statuses_service import AsanaGetProjectStatusesService
 from agent.services.asana.asana_get_tag_service import AsanaGetTagService
 from agent.services.asana.asana_get_tags_for_task_service import AsanaGetTagsForTaskService
@@ -36,7 +42,8 @@ from agent.services.asana.asana_get_my_tasks_service import AsanaGetMyTasksServi
 
 class AgentAsanaCustomToolService:
 
-    def __init__(self):
+    def __init__(self, team):
+        self.team = team
         self._handlers = {
             'asana_list_workspaces': self._handle_list_workspaces,
             'asana_search_projects': self._handle_search_projects,
@@ -47,7 +54,6 @@ class AgentAsanaCustomToolService:
             'asana_get_project_task_counts': self._handle_get_project_task_counts,
             'asana_get_project_sections': self._handle_get_project_sections,
             'asana_get_multiple_tasks_by_gid': self._handle_get_multiple_tasks_by_gid,
-            'asana_get_project_status': self._handle_get_project_status,
             'asana_get_project_statuses': self._handle_get_project_statuses,
             'asana_get_tag': self._handle_get_tag,
             'asana_get_tags_for_task': self._handle_get_tags_for_task,
@@ -65,10 +71,10 @@ class AgentAsanaCustomToolService:
         return self._handlers[event.name](event)
 
     def _handle_list_workspaces(self, event):
-        return self._reply(event, AsanaListWorkspacesService().list_workspaces())
+        return self._reply(event, AsanaListWorkspacesService(self.team).list_workspaces())
 
     def _handle_search_projects(self, event):
-        result = AsanaSearchProjectsService().search_projects(
+        result = AsanaSearchProjectsService(self.team).search_projects(
             event.input.get('workspace_gid'),
             event.input.get('name_pattern'),
             archived=event.input.get('archived'),
@@ -76,7 +82,7 @@ class AgentAsanaCustomToolService:
         return self._reply(event, result)
 
     def _handle_search_tasks(self, event):
-        result = AsanaSearchTasksService().search_tasks(
+        result = AsanaSearchTasksService(self.team).search_tasks(
             event.input.get('workspace_gid'),
             text=event.input.get('text'),
             assignee_any=event.input.get('assignee_any'),
@@ -89,67 +95,63 @@ class AgentAsanaCustomToolService:
         return self._reply(event, result)
 
     def _handle_get_task(self, event):
-        result = AsanaGetTaskService().get_task(
+        result = AsanaGetTaskService(self.team).get_task(
             event.input.get('task_gid'), opt_fields=event.input.get('opt_fields')
         )
         return self._reply(event, result)
 
     def _handle_get_task_stories(self, event):
-        result = AsanaGetTaskStoriesService().get_task_stories(event.input.get('task_gid'))
+        result = AsanaGetTaskStoriesService(self.team).get_task_stories(event.input.get('task_gid'))
         return self._reply(event, result)
 
     def _handle_get_project(self, event):
-        result = AsanaGetProjectService().get_project(
+        result = AsanaGetProjectService(self.team).get_project(
             event.input.get('project_gid'), opt_fields=event.input.get('opt_fields')
         )
         return self._reply(event, result)
 
     def _handle_get_project_task_counts(self, event):
-        result = AsanaGetProjectTaskCountsService().get_project_task_counts(event.input.get('project_gid'))
+        result = AsanaGetProjectTaskCountsService(self.team).get_project_task_counts(event.input.get('project_gid'))
         return self._reply(event, result)
 
     def _handle_get_project_sections(self, event):
-        result = AsanaGetProjectSectionsService().get_project_sections(event.input.get('project_gid'))
+        result = AsanaGetProjectSectionsService(self.team).get_project_sections(event.input.get('project_gid'))
         return self._reply(event, result)
 
     def _handle_get_multiple_tasks_by_gid(self, event):
-        result = AsanaGetMultipleTasksByGidService().get_multiple_tasks_by_gid(
+        result = AsanaGetMultipleTasksByGidService(self.team).get_multiple_tasks_by_gid(
             event.input.get('task_gids') or [], opt_fields=event.input.get('opt_fields')
         )
         return self._reply(event, result)
 
-    def _handle_get_project_status(self, event):
-        result = AsanaGetProjectStatusService().get_project_status(event.input.get('project_status_gid'))
-        return self._reply(event, result)
-
     def _handle_get_project_statuses(self, event):
-        result = AsanaGetProjectStatusesService().get_project_statuses(event.input.get('project_gid'))
+        result = AsanaGetProjectStatusesService(self.team).get_project_statuses(event.input.get('project_gid'))
         return self._reply(event, result)
 
     def _handle_get_tag(self, event):
-        result = AsanaGetTagService().get_tag(event.input.get('tag_gid'))
+        result = AsanaGetTagService(self.team).get_tag(event.input.get('tag_gid'))
         return self._reply(event, result)
 
     def _handle_get_tags_for_task(self, event):
-        result = AsanaGetTagsForTaskService().get_tags_for_task(event.input.get('task_gid'))
+        result = AsanaGetTagsForTaskService(self.team).get_tags_for_task(event.input.get('task_gid'))
         return self._reply(event, result)
 
     def _handle_get_tasks_for_tag(self, event):
-        result = AsanaGetTasksForTagService().get_tasks_for_tag(
+        result = AsanaGetTasksForTagService(self.team).get_tasks_for_tag(
             event.input.get('tag_gid'), opt_fields=event.input.get('opt_fields')
         )
         return self._reply(event, result)
 
     def _handle_get_tags_for_workspace(self, event):
-        result = AsanaGetTagsForWorkspaceService().get_tags_for_workspace(event.input.get('workspace_gid'))
+        result = AsanaGetTagsForWorkspaceService(self.team).get_tags_for_workspace(event.input.get('workspace_gid'))
         return self._reply(event, result)
 
     def _handle_get_subtasks(self, event):
-        result = AsanaGetSubtasksService().get_subtasks(event.input.get('task_gid'))
+        result = AsanaGetSubtasksService(self.team).get_subtasks(event.input.get('task_gid'))
         return self._reply(event, result)
 
     def _handle_get_tasks_for_project(self, event):
-        result = AsanaGetTasksForProjectService().get_tasks_for_project(
+        result = AsanaGetTasksForProjectService(self.team).get_tasks_for_project(
             event.input.get('project_gid'),
             completed_since=event.input.get('completed_since'),
             opt_fields=event.input.get('opt_fields'),
@@ -158,7 +160,7 @@ class AgentAsanaCustomToolService:
         return self._reply(event, result)
 
     def _handle_get_my_tasks(self, event):
-        result = AsanaGetMyTasksService().get_my_tasks(
+        result = AsanaGetMyTasksService(self.team).get_my_tasks(
             event.input.get('workspace_gid'),
             completed_since=event.input.get('completed_since'),
             opt_fields=event.input.get('opt_fields'),

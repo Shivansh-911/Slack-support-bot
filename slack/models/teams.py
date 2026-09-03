@@ -15,7 +15,7 @@ class Teams(models.Model):
     slack_user_token = models.CharField(max_length=256)
     cma_memory_id = models.CharField(max_length=128, blank=True, default='')
     cma_instructions_memory_id = models.CharField(max_length=128, blank=True, default='')
-    asana_workspace_gid = models.CharField(max_length=32)
+    asana_workspace_gid = models.CharField(max_length=32, blank=True, default='')
     asana_project_gids = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 

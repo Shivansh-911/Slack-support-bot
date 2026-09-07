@@ -26,6 +26,7 @@ class TeamSerializer(serializers.ModelSerializer):
             'name',
             'slack_user_id',
             'slack_user_token',
+            'cma_agent_id',
             'cma_memory_id',
             'cma_instructions_memory_id',
             'asana_workspace_gid',

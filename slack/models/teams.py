@@ -7,6 +7,9 @@ settings — only what's listed here differs per team.
 pair — the name is resolved from Asana and kept only for display, so
 whitelist checks must go through `asana_project_gid_list` rather than
 this field directly.
+
+`cma_agent_id` is the Claude Managed Agents agent used to power this
+team's sessions — required per team, no global fallback.
 """
 
 from django.db import models
@@ -18,6 +21,7 @@ class Teams(models.Model):
     name = models.CharField(max_length=64, unique=True)
     slack_user_id = models.CharField(max_length=32, unique=True)
     slack_user_token = models.CharField(max_length=256)
+    cma_agent_id = models.CharField(max_length=128)
     cma_memory_id = models.CharField(max_length=128, blank=True, default='')
     cma_instructions_memory_id = models.CharField(max_length=128, blank=True, default='')
     asana_workspace_gid = models.CharField(max_length=32, blank=True, default='')

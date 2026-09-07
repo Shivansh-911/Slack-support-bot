@@ -4,6 +4,9 @@ A session that finishes its work stays `idle` rather than terminating, so the
 session behind an earlier run in the same Slack thread is still usable for a
 follow-up mention. Reusing it keeps that thread's conversation history and
 sandbox intact; a fresh session is only created when no usable one exists.
+
+The agent that powers a new session is `team.cma_agent_id` — required per
+team, no global fallback — not a single shared `settings.CMA_AGENT_ID`.
 """
 
 from django.conf import settings
@@ -23,9 +26,10 @@ class AgentSessionCreateService:
         return session.id
 
     def _create(self, client, channel_id, thread_ts, team):
-        self._assert_configured()
+        self._assert_configured(team)
         session = client.beta.sessions.create(
-            agent=settings.CMA_AGENT_ID,
+            # agent=settings.CMA_AGENT_ID,
+            agent=team.cma_agent_id,
             environment_id=settings.CMA_ENVIRONMENT_ID,
             vault_ids=[settings.CMA_VAULT_ID] if settings.CMA_VAULT_ID else [],
             budget=self._budget(),
@@ -101,15 +105,21 @@ class AgentSessionCreateService:
             return f'Slack thread {channel_id}/{thread_ts}'
         return f'Slack channel {channel_id}'
 
-    def _assert_configured(self):
+    def _assert_configured(self, team):
         missing = [
             name
-            for name in ('CMA_AGENT_ID', 'CMA_ENVIRONMENT_ID')
+            # for name in ('CMA_AGENT_ID', 'CMA_ENVIRONMENT_ID')
+            for name in ('CMA_ENVIRONMENT_ID',)
             if not getattr(settings, name, None)
         ]
         if missing:
             raise ImproperlyConfigured(
                 f'{", ".join(missing)} must be set before starting a session. '
                 'Create the agent and environment with the `ant` CLI first.'
+            )
+        if not team.cma_agent_id:
+            raise ImproperlyConfigured(
+                f'Team {team.name!r} has no cma_agent_id set. '
+                'Assign this team a Claude Managed Agents agent id first.'
             )
 

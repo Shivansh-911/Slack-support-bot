@@ -14,7 +14,7 @@ from slack.services.asana_project_lookup_service import AsanaProjectLookupServic
 
 
 class TeamSeedService:
-    REQUIRED_FIELDS = ('name', 'slack_user_id', 'slack_user_token', 'asana_workspace_gid')
+    REQUIRED_FIELDS = ('name', 'slack_user_id', 'slack_user_token', 'cma_agent_id', 'asana_workspace_gid')
 
     def seed(self, file_path):
         with open(file_path) as seed_file:
@@ -28,6 +28,7 @@ class TeamSeedService:
         fields = {
             'slack_user_id': entry['slack_user_id'],
             'slack_user_token': entry['slack_user_token'],
+            'cma_agent_id': entry['cma_agent_id'],
             'cma_memory_id': entry.get('cma_memory_id', ''),
             'cma_instructions_memory_id': entry.get('cma_instructions_memory_id', ''),
             'asana_workspace_gid': entry['asana_workspace_gid'],

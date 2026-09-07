@@ -1,0 +1,29 @@
+{
+  "slack-search": {
+    "skill_id": "skill_01XK8vXMR1rQEVnNAFffTHAp"
+  },
+  "asana-search": {
+    "skill_id": "skill_01LkxXWD9Ftota86BEj7uBby"
+  },
+  "slack-search-2": {
+    "skill_id": "skill_01Sy29s21dSE7CSLa8KNHGk1"
+  },
+  "slack-channel-first-search": {
+    "skill_id": "skill_01JbpeZxivNkrp9TgB6gpNnS"
+  },
+  "answering": {
+    "skill_id": "skill_012j8tyCunh8etLjAqYXmMwz"
+  },
+  "slack-context-search": {
+    "skill_id": "skill_01E6vQphMrmPZ346K1WFkS3i"
+  },
+  "asana-search-2": {
+    "skill_id": "skill_01SE8jjoFCDJYgQ5v11ADw7i"
+  },
+  "slack-search-3": {
+    "skill_id": "skill_01P5AhuZvNDMwDNNkYydww6S"
+  },
+  "slack-search-4": {
+    "skill_id": "skill_01Y3vzbx5t49Ria68T8xH96A"
+  }
+}

@@ -4,6 +4,9 @@ A session that finishes its work stays `idle` rather than terminating, so the
 session behind an earlier run in the same Slack thread is still usable for a
 follow-up mention. Reusing it keeps that thread's conversation history and
 sandbox intact; a fresh session is only created when no usable one exists.
+
+The agent that powers a new session is `team.cma_agent_id` — required per
+team, no global fallback — not a single shared `settings.CMA_AGENT_ID`.
 """
 
 from django.conf import settings
@@ -22,22 +25,23 @@ class AgentSessionCreateService:
             return None
         return session.id
 
-    def _create(self, client, channel_id, thread_ts):
-        self._assert_configured()
+    def _create(self, client, channel_id, thread_ts, team):
+        self._assert_configured(team)
         session = client.beta.sessions.create(
-            agent=settings.CMA_AGENT_ID,
+            # agent=settings.CMA_AGENT_ID,
+            agent=team.cma_agent_id,
             environment_id=settings.CMA_ENVIRONMENT_ID,
             vault_ids=[settings.CMA_VAULT_ID] if settings.CMA_VAULT_ID else [],
             budget=self._budget(),
             title=self._title(channel_id, thread_ts),
-            resources=self._resources(),
+            resources=self._resources(team),
         )
         return session.id
 
-    def _resources(self):
+    def _resources(self, team):
         resources = []
 
-        if settings.CMA_SLACK_MEMORY_STORE_ID:
+        if team.cma_memory_id:
             # CMA_SLACK_MEMORY_STORE_ID => per-channel/per-user context files.
             # Mount path is NOT hardcoded here — CMA auto-injects the real
             # mount path, access mode, and this instructions text into the
@@ -45,10 +49,10 @@ class AgentSessionCreateService:
             # live path rather than one we guessed.
             resources.append({
                 'type': 'memory_store',
-                'memory_store_id': settings.CMA_SLACK_MEMORY_STORE_ID,
+                'memory_store_id': team.cma_memory_id,
                 'access': 'read_write',
                 'instructions': (
-                    "Holds durable facts about Slack channels and users. "
+                    "Holds durable facts about Slack channels, users, and Asana. "
                     "Before resolving a channel or user, check here first, "
                     "case-insensitively — reuse what's already recorded "
                     "instead of re-resolving from scratch. When new info "
@@ -57,46 +61,31 @@ class AgentSessionCreateService:
                 )
             })
 
-        if settings.CMA_WHITELISTED_CHANNELS:
-            # CMA_WHITELISTED_CHANNELS => single read-only allowlist file,
-            # channels.md, listing every Slack channel_id (and its name) this
-            # agent may access. Read at the start of every conversation.
-            resources.append({
-                'type': 'memory_store',
-                'memory_store_id': settings.CMA_WHITELISTED_CHANNELS,
-                'access': 'read_only',
-                'instructions': (
-                    "Contains a single file, channels.md, listing every Slack "
-                    "channel_id (and its name) this agent is allowed to "
-                    "access. "
-                    "1. Read it once at the start of every conversation, "
-                    "before the first Slack tool call. "
-                    "2. Before calling any Slack tool that takes a "
-                    "channel_id, confirm that id appears in this file first — "
-                    "if it doesn't, treat the channel as out of scope rather "
-                    "than calling the tool."
-                )
-            })
-
-        if settings.CMA_INSTRUCTIONS_MEMORY_STORE_ID:
+        if team.cma_instructions_memory_id:
             # CMA_INSTRUCTIONS_MEMORY_STORE_ID => standing instructions a user
             # has given the agent about how to behave and format answers.
             # Global to the whole workspace, not scoped to a channel or user.
             resources.append({
                 'type': 'memory_store',
-                'memory_store_id': settings.CMA_INSTRUCTIONS_MEMORY_STORE_ID,
+                'memory_store_id': team.cma_instructions_memory_id,
                 'access': 'read_write',
                 'instructions': (
                     "Holds standing instructions a user has given about how "
                     "you should behave and format answers in this workspace "
                     "— tone, response length, formatting, things to always "
                     "or never do. These apply globally, not to one channel "
-                    "or user. Read it before answering every message and "
-                    "shape your response accordingly. When someone gives you "
-                    "an instruction meant to apply going forward rather than "
-                    "just this once, write it here — update an existing "
-                    "entry in place if it conflicts with or refines one "
-                    "already recorded, rather than duplicating it."
+                    "or user. MANDATORY: read this store's full contents "
+                    "before writing your final answer to every single "
+                    "message you handle in this session, including every "
+                    "follow-up later in the same thread — not just the "
+                    "first message. Never skip this because you read it "
+                    "earlier in the session; standing instructions can be "
+                    "added or changed mid-thread and a stale read is a "
+                    "failure. When someone gives you an instruction meant "
+                    "to apply going forward rather than just this once, "
+                    "write it here — update an existing entry in place if "
+                    "it conflicts with or refines one already recorded, "
+                    "rather than duplicating it."
                 )
             })
 
@@ -116,15 +105,21 @@ class AgentSessionCreateService:
             return f'Slack thread {channel_id}/{thread_ts}'
         return f'Slack channel {channel_id}'
 
-    def _assert_configured(self):
+    def _assert_configured(self, team):
         missing = [
             name
-            for name in ('CMA_AGENT_ID', 'CMA_ENVIRONMENT_ID')
+            # for name in ('CMA_AGENT_ID', 'CMA_ENVIRONMENT_ID')
+            for name in ('CMA_ENVIRONMENT_ID',)
             if not getattr(settings, name, None)
         ]
         if missing:
             raise ImproperlyConfigured(
                 f'{", ".join(missing)} must be set before starting a session. '
                 'Create the agent and environment with the `ant` CLI first.'
+            )
+        if not team.cma_agent_id:
+            raise ImproperlyConfigured(
+                f'Team {team.name!r} has no cma_agent_id set. '
+                'Assign this team a Claude Managed Agents agent id first.'
             )
 

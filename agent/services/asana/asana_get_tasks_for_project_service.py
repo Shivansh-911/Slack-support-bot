@@ -11,9 +11,9 @@ from agent.services.asana.asana_gate_service import AsanaGateService
 class AsanaGetTasksForProjectService:
     FIELDS = 'name,completed,assignee.name,due_on,permalink_url'
 
-    def __init__(self):
+    def __init__(self, team):
         self.client = AsanaApiClientService()
-        self.gate = AsanaGateService()
+        self.gate = AsanaGateService(team)
 
     def get_tasks_for_project(self, project_gid, completed_since=None, opt_fields=None, limit=100):
         if not self.gate.is_project_allowed(project_gid):

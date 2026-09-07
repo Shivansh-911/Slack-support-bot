@@ -55,3 +55,5 @@ If the question itself asks for something broad or comprehensive, breadth is the
 ## 6. Answer
 
 Attribute using both real name and user_id together. Only name someone as involved if an included, on-topic fact ties them to it — not because they were active in the same channel or project. Don't claim something doesn't exist unless resolution actually failed to find it.
+
+If the question is about approval, consensus, sentiment, or who reacted to something, a message's `reactions` (returned by `conversations_replies` — emoji `name`, `count`, reacting `users`) is the evidence to cite, the same as a text fact. Skip reactions entirely for questions that aren't asking about them.

@@ -151,6 +151,13 @@ tools:
       it back as cursor to fetch the next page. Don't set cursor together
       with oldest/latest on the same call — paginate with cursor alone once
       you've started.
+
+      Each message includes a `reactions` list when present — each entry has
+      `name` (the emoji), `count`, and `users` (the reacting user IDs). Use
+      this as evidence of approval, consensus, or disagreement on that
+      specific message when the question actually calls for it (e.g. "did
+      anyone approve X," "how did the team react to Y") — don't surface
+      reactions for questions that aren't about sentiment/approval.
     input_schema:
       type: object
       properties:
@@ -292,7 +299,7 @@ system: |
   <output_contract>
   Exactly one shape per response (combine Findings with Error if partial):
 
-  **Findings** — grouped by channel, most relevant first; each fact as `<fact> — <permalink or ts>, by <real name (user_id)>`; merge repeated channels into one block; include enough detail for cross-referencing without re-searching. Only attribute someone as involved if a fact you're including actually ties them to the topic — not just to the project or channel. Every fact included must be narrowly on-topic per <research_quality> — a loosely related mention isn't a finding.
+  **Findings** — grouped by channel, most relevant first; each fact as `<fact> — <permalink or ts>, by <real name (user_id)>`; merge repeated channels into one block; include enough detail for cross-referencing without re-searching. Only attribute someone as involved if a fact you're including actually ties them to the topic — not just to the project or channel. Every fact included must be narrowly on-topic per <research_quality> — a loosely related mention isn't a finding. When the question concerns approval, consensus, sentiment, or "who reacted," cite that message's `reactions` (from `conversations_replies`) alongside the fact — e.g. `:+1: 3 (real name (user_id), ...)` — don't include reactions otherwise.
 
   **No relevant results** — searched per <research_quality>'s narrow-relevance and search-cap rules, and nothing came back that actually addresses the specific entity/topic asked (a same-channel-only or same-project-only match doesn't count). State what you searched for and what, if anything, the searches did return.
 

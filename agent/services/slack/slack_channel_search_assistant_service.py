@@ -18,7 +18,6 @@ mention, not the `in:<#channel_id>` channel-mention syntax channel_ids
 uses.
 """
 
-from django.conf import settings
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -27,8 +26,8 @@ class SlackChannelSearchAssistantService:
     MAX_RESULTS = 5
     CONTENT_TYPES = ["messages"]
 
-    def __init__(self):
-        self.client = WebClient(token=settings.SLACK_USER_TOKEN)
+    def __init__(self, slack_user_token):
+        self.client = WebClient(token=slack_user_token)
 
     def search(
         self,

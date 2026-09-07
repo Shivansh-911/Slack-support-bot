@@ -116,11 +116,11 @@ class SlackAPI:
         return 
 
     def userinfo(self):
-        client = WebClient(token=settings.SLACK_BOT_TOKEN)   
+        client = WebClient(token=settings.SLACK_USER_TOKEN)   
 
         try:
             response = client.users_info(
-                user= 'U0B7C6RBUD8'
+                user= 'U09C5EQRMS4'
             )
         except Exception as error:
             return {"error": f"Slack search failed: {error}"}
@@ -145,8 +145,8 @@ class SlackAPI:
                     name = channel_resp.get('name')
                     channel = channel_resp.get('id')
                     if name and channel:
-                        if channel == 'C03F83XPEJU' or channel == 'C04AFL2GECE' or channel == 'C0APS04G7DM' or channel == 'C0B3LET9YQ4' or channel == 'C0BJN116WQ5' or channel == 'C0BJV4LF6N7' or channel == 'C0BM44A3YCW':
-                            continue
+                        # if channel == 'C03F83XPEJU' or channel == 'C04AFL2GECE' or channel == 'C0APS04G7DM' or channel == 'C0B3LET9YQ4' or channel == 'C0BJN116WQ5' or channel == 'C0BJV4LF6N7' or channel == 'C0BM44A3YCW':
+                            # continue
                         mapping[channel] = name
                 cursor = response.get('response_metadata', {}).get('next_cursor')
                 if not cursor:
@@ -232,8 +232,41 @@ class SlackAPI:
         return response.get('users', [])
 
 
+    def list_repiles(self):
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
+        try:
+            response = client.conversations_replies(channel="C07RF9Y304S",ts="1788166216.876149")
+            return response
+        except SlackApiError:
+            pass
+
+    def list_replies(self):
+        from agent.services.slack.slack_conversation_replies_service import SlackConversationRepliesService
+        from agent.services.slack.formatter.slack_conversation_replies_formatter import SlackConversationRepliesFormatter
+
+        channel = "C07RF9Y304S"
+        thread_ts = "1788166216.876149"
+
+        response_data = SlackConversationRepliesService().replies(
+            channel=channel,
+            thread_ts=thread_ts,
+            include_activity_messages=False,
+            cursor=None,
+            oldest=None,
+            latest=None,
+            slack_user_token=settings.SLACK_USER_TOKEN,
+        )
+        print("RAW RESULTS : ")
+        print(response_data)
+
+        formatted = SlackConversationRepliesFormatter().format(response_data)
+        print("\nFORMATTED RESULTS : ")
+
+        return formatted
+
     def main(self):
-        return self.listchannels()
+        # return self.list_repiles()
+        return self.list_replies()
 
 
 if __name__ == "__main__":

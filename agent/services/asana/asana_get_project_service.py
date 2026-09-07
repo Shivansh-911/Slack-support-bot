@@ -11,9 +11,9 @@ from agent.services.asana.asana_gate_service import AsanaGateService
 class AsanaGetProjectService:
     FIELDS = 'name,notes,owner.name,members.name,current_status_update,due_on,archived'
 
-    def __init__(self):
+    def __init__(self, team):
         self.client = AsanaApiClientService()
-        self.gate = AsanaGateService()
+        self.gate = AsanaGateService(team)
 
     def get_project(self, project_gid, opt_fields=None):
         if not self.gate.is_project_allowed(project_gid):

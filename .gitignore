@@ -5,3 +5,4 @@ db.sqlite3
 .env
 cma/skills/.manifest.json
 teams_seed.json
+tests/

@@ -1,12 +1,16 @@
 """Reads a JSON seed file and upserts each entry into the Teams table.
 
 Entries are matched by `name`, so re-running this after editing the seed
-file updates existing rows in place rather than duplicating them.
+file updates existing rows in place rather than duplicating them. Each
+entry's `asana_project_gids` is a flat list of gids, same as the team
+serializer's input; AsanaProjectLookupService resolves each to its project
+name before it's saved.
 """
 
 import json
 
 from slack.models.teams import Teams
+from slack.services.asana_project_lookup_service import AsanaProjectLookupService
 
 
 class TeamSeedService:
@@ -27,7 +31,7 @@ class TeamSeedService:
             'cma_memory_id': entry.get('cma_memory_id', ''),
             'cma_instructions_memory_id': entry.get('cma_instructions_memory_id', ''),
             'asana_workspace_gid': entry['asana_workspace_gid'],
-            'asana_project_gids': entry.get('asana_project_gids', []),
+            'asana_project_gids': AsanaProjectLookupService().resolve(entry.get('asana_project_gids', [])),
         }
         return Teams.objects.upsert(entry['name'], **fields)
 

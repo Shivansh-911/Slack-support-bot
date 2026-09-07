@@ -78,6 +78,16 @@ class SlackConversationRepliesService:
             formatted['reply_count'] = message.get('reply_count')
         if message.get('subtype'):
             formatted['subtype'] = message.get('subtype')
+        reactions = message.get('reactions')
+        if reactions:
+            formatted['reactions'] = [
+                {
+                    'name': reaction.get('name', ''),
+                    'count': reaction.get('count', 0),
+                    'users': reaction.get('users', []),
+                }
+                for reaction in reactions
+            ]
         return formatted
 
 

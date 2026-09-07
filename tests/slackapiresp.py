@@ -17,7 +17,7 @@ class SlackAPI:
 
         channel_list = "in:<#C03E3P80CDV> OR in:<#C03EBMTEC14> OR in:<#C03F83XPEJU> OR in:<#C04AFL2GECE> OR in:<#C04AZRNAW7L> OR in:<#C05J50UV99R> OR in:<#C07RF9Y304S> OR in:<#C0APS04G7DM> OR in:<#C0B3LET9YQ4> OR in:<#C0BJN116WQ5>  OR in:<#C0BM44A3YCW>"
         # user_query = "crictoday on development"
-        query = "developement on crictoday in:#seo   from:<@U05KG4KQQBY> from:@devashish"
+        query = "in:<#C07RF9Y304S> with:<@S0A556SUT6Y>"
         # query = "cache tags"
         # query = f'{query} {channel_list}'
         action_token = None
@@ -266,7 +266,7 @@ class SlackAPI:
 
     def main(self):
         # return self.list_repiles()
-        return self.list_replies()
+        return self.fetch()
 
 
 if __name__ == "__main__":

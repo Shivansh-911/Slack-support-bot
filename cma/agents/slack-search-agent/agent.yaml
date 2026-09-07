@@ -57,11 +57,21 @@ tools:
             Include messages from users whose accounts have since been
             deleted (default: false).
         before:
-          type: integer
-          description: Only messages before this Unix timestamp (inclusive).
+          type: string
+          description: >-
+            Only messages before this date/time (inclusive of the whole day
+            if a bare date is given). A date ("2026-08-31") or an ISO 8601
+            date-time ("2026-08-31T23:59:59Z", "2026-08-31 23:59:59 UTC").
+            No timezone given is treated as UTC, matching current_datetime.
+            Pass the date/time as text — never compute a raw Unix epoch
+            number yourself; the backend converts it deterministically.
         after:
-          type: integer
-          description: Only messages after this Unix timestamp (inclusive).
+          type: string
+          description: >-
+            Only messages after this date/time (start of the day if a bare
+            date is given). Same format as `before`. Pass the date/time as
+            text — never compute a raw Unix epoch number yourself; the
+            backend converts it deterministically.
         include_context_messages:
           type: boolean
           description: >-
@@ -135,11 +145,21 @@ tools:
           type: string
           description: Pagination cursor from a previous call's next_cursor.
         oldest:
-          type: integer
-          description: Only messages after this Unix timestamp (inclusive).
+          type: string
+          description: >-
+            Only messages after this date/time (start of the day if a bare
+            date is given). A date ("2026-08-31") or an ISO 8601 date-time
+            ("2026-08-31T00:00:00Z", "2026-08-31 00:00:00 UTC"). No
+            timezone given is treated as UTC, matching current_datetime.
+            Pass the date/time as text — never compute a raw Unix epoch
+            number yourself; the backend converts it deterministically.
         latest:
-          type: integer
-          description: Only messages before this Unix timestamp (inclusive).
+          type: string
+          description: >-
+            Only messages before this date/time (inclusive of the whole
+            day if a bare date is given). Same format as `oldest`. Pass
+            the date/time as text — never compute a raw Unix epoch number
+            yourself; the backend converts it deterministically.
       required:
         - channel
 
@@ -181,11 +201,21 @@ tools:
           type: string
           description: Pagination cursor from a previous call's next_cursor.
         oldest:
-          type: integer
-          description: Only messages after this Unix timestamp (inclusive).
+          type: string
+          description: >-
+            Only messages after this date/time (start of the day if a bare
+            date is given). A date ("2026-08-31") or an ISO 8601 date-time
+            ("2026-08-31T00:00:00Z", "2026-08-31 00:00:00 UTC"). No
+            timezone given is treated as UTC, matching current_datetime.
+            Pass the date/time as text — never compute a raw Unix epoch
+            number yourself; the backend converts it deterministically.
         latest:
-          type: integer
-          description: Only messages before this Unix timestamp (inclusive).
+          type: string
+          description: >-
+            Only messages before this date/time (inclusive of the whole
+            day if a bare date is given). Same format as `oldest`. Pass
+            the date/time as text — never compute a raw Unix epoch number
+            yourself; the backend converts it deterministically.
       required:
         - channel
         - thread_ts
@@ -271,10 +301,24 @@ system: |
   </memory_first_resolution>
 
   <input_handling>
-  You're given: `channel_id` (where asked), `thread_ts`, `user_id` (asker), the Slack-relevant slice of the question, sometimes a freshness cutoff (convert to `after` — never widen past it), sometimes a different channel_id/thread_ts as a re-check fetch target (see thread_recheck). Treat this as complete — don't backfill from outside it.
+  You're given: `channel_id` (where asked), `thread_ts`, `user_id` (asker), the Slack-relevant slice of the question, sometimes a freshness cutoff (a date/time — carry it into `after` as text, never widen past it, never convert it to a raw epoch number yourself; see time_filters below), sometimes a different channel_id/thread_ts as a re-check fetch target (see thread_recheck), sometimes a resolved `user_id`/`usergroup_id` naming the question's actual subject (see mention_query below) — sometimes that subject is given as a name only, still needing resolution. Treat this as complete — don't backfill from outside it.
 
   `channel_id`'s presence doesn't scope the search by itself — only scope when the question names a channel explicitly. For "me"/"my," `user_id` is the requester; resolve any other named person the same way, one at a time, memory-first.
   </input_handling>
+
+  <mention_query>
+  When the question's subject is a specific person or Slack user group — asking what was said to/about/involving them, not just who authored something — search for them as a mention, not (only) as an author filter:
+
+  Resolve the subject to its Slack `user_id`/`usergroup_id` first if not already given as an ID (memory-first, per `<memory_first_resolution>`; fall back to `list_usergroups` for a team, or the name-in-query fallback in the slack-context-search skill for a person). Then run your first `search_whitelisted_channels` call for that subject with `query` set to exactly `<@user_id>` or `<@usergroup_id>` — the mention token alone, no other words mixed into `query`. Other parameters (`channel_ids`, `before`/`after`, `users_from`, `term_clauses`, etc.) may still be set on that same call.
+
+  This is distinct from `users_from`: `<@id>` in `query` finds messages that mention/tag that person or group; `users_from` finds messages that person authored. Use `<@id>` for "about/to this person/team," `users_from` for "written by this person," and both together only if the question genuinely asks for both. If the first `<@id>` call doesn't surface enough, refine per `<research_quality>` as usual — the `<@id>`-only form applies to that first call, not to every subsequent refinement.
+  </mention_query>
+
+  <time_filters>
+  `before`/`after` (search_whitelisted_channels) and `oldest`/`latest` (conversations_history/conversations_replies) take a date or date-time string, not a raw integer — the backend does the Unix-epoch conversion deterministically, so never compute or write an epoch number yourself.
+
+  Reason about the calendar in plain terms against `current_datetime`, then pass the result as text: a bare date ("2026-08-31") or an ISO date-time ("2026-08-31T14:30:00Z" / "2026-08-31 14:30:00 UTC"). No timezone given is treated as UTC. A bare date is inclusive of the whole day at the `before`/`latest` end and starts at 00:00 at the `after`/`oldest` end, so "the month of August" is simply `after: "2026-08-01"`, `before: "2026-08-31"` — no day/second math required.
+  </time_filters>
 
   <thread_recheck>
   When given a specific channel_id + thread_ts as a fetch target for a freshness re-check, fetch it directly with `conversations_replies` — don't run a full search. Resolve the channel against the allowlist first. Report only what's newer than any given cutoff. If the fetch fails, report an Error — don't fall back to a full search yourself.

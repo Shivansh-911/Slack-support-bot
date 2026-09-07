@@ -32,10 +32,11 @@ Anchor on the specific topic named in the question — never on the project, cha
 - Lead with the topic's exact name/acronym as the query, optionally `disable_semantic_search: true`, or as a required `term_clauses` entry rather than a loosely weighted word.
 - Use semantic search only if the exact-term pass is too narrow or you need paraphrased mentions — keep the topic term required via `term_clauses` even then.
 - `users_from` — only once a person's ID is already resolved and the question needs messages they authored, not just mentioned them.
+- **Person/usergroup as the subject** — if the question is about/to/involving a specific person or Slack user group (not just who wrote something), resolve them to their `user_id`/`usergroup_id` first (step 2), then run the first call's `query` as exactly `<@user_id>` or `<@usergroup_id>` — the mention token alone, nothing else in `query`. Other parameters (channel_ids, before/after, term_clauses, etc.) can still be set on that call. This surfaces messages that mention/tag them, which `users_from` (authored-by) doesn't catch. Refine with topic terms in later calls as needed.
 
 ## 4. Apply filters
 
-- **Time** — convert any stated or implied cutoff/range into `after`/`before` as concrete timestamps. Never leave a stated time constraint unconverted; never widen past a given cutoff; leave unset if nothing was stated.
+- **Time** — convert any stated or implied cutoff/range into `after`/`before` (or `oldest`/`latest`) as plain date/date-time strings, e.g. `after: "2026-08-01"`, `before: "2026-08-31"` for "the month of August," reasoned against `current_datetime`. Never compute a raw Unix epoch number yourself — the backend converts the string deterministically; that's the whole point of passing text instead of doing the arithmetic. Never leave a stated time constraint unconverted; never widen past a given cutoff; leave unset if nothing was stated.
 - **Context** — leave `include_context_messages` off; fetch `conversations_replies` only for the one message whose meaning genuinely depends on surrounding conversation.
 - **Bots/deleted users** — off by default; include only if asked or attribution requires it.
 

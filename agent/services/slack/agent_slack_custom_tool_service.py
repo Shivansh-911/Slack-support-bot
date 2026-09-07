@@ -33,6 +33,7 @@ from agent.services.slack.slack_user_profile_service import SlackUserProfileServ
 from agent.services.slack.slack_channel_service import SlackChannelService
 from agent.services.slack.slack_usergroups_service import SlackUserGroupsService
 from agent.services.slack.slack_reactions_service import SlackReactionsService
+from agent.services.slack.slack_time_utils import parse_to_unix_timestamp
 from agent.services.slack.formatter.slack_search_result_formatter import SlackSearchResultFormatter
 from agent.services.slack.formatter.slack_conversation_history_formatter import SlackConversationHistoryFormatter
 from agent.services.slack.formatter.slack_conversation_replies_formatter import SlackConversationRepliesFormatter
@@ -82,14 +83,20 @@ class AgentslackCustomToolService:
         if context_channel_id and context_channel_id not in channel_mapping:
             return self._reply(event, {'error': f'Channel {context_channel_id} is not whitelisted.'})
 
+        try:
+            before = parse_to_unix_timestamp(event.input.get('before'), end_of_day=True)
+            after = parse_to_unix_timestamp(event.input.get('after'), end_of_day=False)
+        except ValueError as error:
+            return self._reply(event, {'error': str(error)})
+
         result = SlackChannelSearchAssistantService(self.team.slack_user_token).search(
             query=event.input.get('query'),
             channel_ids=channel_ids,
             users_from=event.input.get('users_from'),
             include_bots=event.input.get('include_bots', False),
             include_deleted_users=event.input.get('include_deleted_users', False),
-            before=event.input.get('before'),
-            after=event.input.get('after'),
+            before=before,
+            after=after,
             include_context_messages=event.input.get('include_context_messages'),
             context_channel_id=context_channel_id,
             cursor=event.input.get('cursor'),
@@ -102,25 +109,35 @@ class AgentslackCustomToolService:
         return self._reply(event, result, formated_text, out_of_scope)
 
     def _handle_conversations_history(self, event, channel_mapping):
+        try:
+            oldest = parse_to_unix_timestamp(event.input.get('oldest'), end_of_day=False)
+            latest = parse_to_unix_timestamp(event.input.get('latest'), end_of_day=True)
+        except ValueError as error:
+            return self._reply(event, {'error': str(error)})
         result = SlackConversationHistoryService().history(
             channel=event.input.get('channel'),
             include_activity_messages=event.input.get('include_activity_messages', False),
             cursor=event.input.get('cursor'),
-            oldest=event.input.get('oldest'),
-            latest=event.input.get('latest'),
+            oldest=oldest,
+            latest=latest,
             slack_user_token=self.team.slack_user_token,
         )
         formated_text = SlackConversationHistoryFormatter().format(result)
         return self._reply(event, result, formated_text)
 
     def _handle_conversations_replies(self, event, channel_mapping):
+        try:
+            oldest = parse_to_unix_timestamp(event.input.get('oldest'), end_of_day=False)
+            latest = parse_to_unix_timestamp(event.input.get('latest'), end_of_day=True)
+        except ValueError as error:
+            return self._reply(event, {'error': str(error)})
         result = SlackConversationRepliesService().replies(
             channel=event.input.get('channel'),
             thread_ts=event.input.get('thread_ts'),
             include_activity_messages=event.input.get('include_activity_messages', False),
             cursor=event.input.get('cursor'),
-            oldest=event.input.get('oldest'),
-            latest=event.input.get('latest'),
+            oldest=oldest,
+            latest=latest,
             slack_user_token=self.team.slack_user_token,
         )
         formated_text = SlackConversationRepliesFormatter().format(result)

@@ -231,6 +231,7 @@ system: |
   - Relevant Slack context, if needed.
   - Relevant facts already established by memory or a prior specialist.
   - Named entities or identifiers.
+  - When the question's subject is a specific person or a Slack user group (by name, handle, or @mention) — not just an author filter but who/what the search is actually about — resolve it to its Slack `user_id`/`usergroup_id` first: check memory (per <memory_first_resolution>) for an already-resolved ID; if memory doesn't have it, still delegate to slack-search-agent but flag that the name needs resolving before the ID-based query below can run. Once resolved (now or by slack-search-agent), pass the ID explicitly in the brief and say it should be searched as a mention target, not just as an author.
   - A narrow scope: the exact entity/topic the question names, not just the right channel/project/client. A brief that only narrows the specialist down to a container (a channel, a project) but not the actual subject is still too broad — narrow both.
   - Any constraint inherited from the original question when this is a follow-up — time range, scope, entity, filter — per <followup_context>, even if this message doesn't restate it.
   - A stored thread reference, or a freshness cutoff date and time, when this delegation is a re-check per <memory_first_resolution> — see "Re-check delegation" below.
@@ -241,7 +242,7 @@ system: |
   When <memory_first_resolution>'s Per-fact freshness rules send you to a specialist to re-check something memory already partly covers, the method follows whichever tier that section resolved to:
 
   - **Thread-only re-check** (non-terminal fact, `Verified:` under a week old, `Thread:` stored) — the brief carries the stored `channel_id` and `thread_ts` and asks the specialist to fetch that specific thread's current state directly, not to run a keyword/semantic search. Still include the fact's current status from memory as context, so the specialist knows what it's confirming or updating.
-  - **Full search re-check** (non-terminal fact `Verified:` a week or older, no `Thread:` stored, or a broad re-scan against `Last full sweep:`) — the brief carries a freshness cutoff: that fact's `Verified:` timestamp for a single-fact re-check, or the doc's `Last full sweep:` timestamp for a broad re-scan. Phrase it as a plain constraint, date and time both, e.g. "memory already covers this up to 2026-08-21 14:30 UTC; only need anything after that" — let the specialist translate it into its own time filter. Don't compute or pass a raw Unix timestamp yourself; the specialist does that conversion.
+  - **Full search re-check** (non-terminal fact `Verified:` a week or older, no `Thread:` stored, or a broad re-scan against `Last full sweep:`) — the brief carries a freshness cutoff: that fact's `Verified:` timestamp for a single-fact re-check, or the doc's `Last full sweep:` timestamp for a broad re-scan. Phrase it as a plain constraint, date and time both, e.g. "memory already covers this up to 2026-08-21 14:30 UTC; only need anything after that" — let the specialist translate it into its own time filter. Never compute or pass a raw Unix timestamp yourself, and slack-search-agent doesn't either — its time-filter tool params take a plain date/date-time string, and the backend converts it to an epoch number deterministically.
 
   Either way:
   - Skip both the thread reference and the cutoff when there's nothing to bound against — the Missing case, or a first-time broad search — since that still needs unrestricted retrieval.
@@ -266,6 +267,7 @@ system: |
   - The relevant question portion.
   - Relevant memory facts.
   - A stored `channel_id` + `thread_ts`, or a freshness cutoff date and time, when delegated as a re-check (see "Re-check delegation" above) — so the specialist goes straight to the known thread, or scopes a full search to only what's new since memory was last verified.
+  - A resolved `user_id`/`usergroup_id`, when the question's subject is a specific person or team (see above) — labeled explicitly as the mention target so slack-search-agent runs its first query as `<@user_id>`/`<@usergroup_id>` alone, per its own query-construction rules. If not yet resolved, say so and let slack-search-agent resolve the name before running that query.
   - Any cross-reference input from Asana, only if genuinely required.
   - Never ask it to search Asana; never bypass its access boundaries.
 

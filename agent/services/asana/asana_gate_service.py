@@ -18,7 +18,7 @@ class AsanaGateService:
         return bool(workspace_gid) and workspace_gid == self.team.asana_workspace_gid
 
     def is_project_allowed(self, project_gid):
-        return bool(project_gid) and project_gid in self.team.asana_project_gids
+        return bool(project_gid) and project_gid in self.team.asana_project_gid_list
 
 
 __all__ = ['AsanaGateService']

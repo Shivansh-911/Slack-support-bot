@@ -59,8 +59,8 @@ class AsanaSearchTasksService:
 
     def _scoped_projects(self, projects_any):
         if not projects_any:
-            return list(self.team.asana_project_gids)
-        return [gid for gid in projects_any if gid in self.team.asana_project_gids]
+            return list(self.team.asana_project_gid_list)
+        return [gid for gid in projects_any if gid in self.team.asana_project_gid_list]
 
 
 __all__ = ['AsanaSearchTasksService']

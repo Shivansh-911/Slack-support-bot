@@ -119,10 +119,10 @@ class SlackEventListenerService:
                 all_channels
             )
         except SessionBusyError:
-            self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token, channel_type)
+            self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token, channel_type, team.name)
             return
         if answer:
-            self._post(channel_id, thread_ts, answer, team.slack_user_token, channel_type)
+            self._post(channel_id, thread_ts, answer, team.slack_user_token, channel_type, team.name)
 
         # answer = self._debug_run_summary(
             # channel_id, thread_ts, slack_team_id, user_id, question, message_ts, trigger_type, team, all_channels
@@ -174,10 +174,11 @@ class SlackEventListenerService:
     def _strip_mention(self, text, slack_user_id):
         return re.sub(f'<@{slack_user_id}>', '', text or '').strip()
 
-    def _post(self, channel_id, thread_ts, text, slack_token, channel_type):
-        formatted = SlackMarkdownFormatter().format(text) or self.EMPTY_ANSWER_MESSAGE
+    def _post(self, channel_id, thread_ts, text, slack_token, channel_type, name):
         if channel_type == 'im':
             slack_token = settings.SLACK_BOT_TOKEN
+            text = text + f"\n({name})"
+        formatted = SlackMarkdownFormatter().format(text) or self.EMPTY_ANSWER_MESSAGE
         client = WebClient(token=slack_token)
         try:
             client.chat_postMessage(

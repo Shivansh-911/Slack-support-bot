@@ -3,16 +3,17 @@ single conversation. No name resolution here — pair with
 SlackUserProfileService to turn an ID into a profile.
 """
 
+from django.conf import settings
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 
 class SlackChannelMembersService:
 
-    def members(self, channel_id, slack_user_token):
+    def members(self, channel_id):
         if not channel_id:
             return {'error': 'channel_id is required.'}
-        client = WebClient(token=slack_user_token)
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
         member_ids = []
         cursor = None
         try:

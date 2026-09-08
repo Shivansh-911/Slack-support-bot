@@ -19,9 +19,9 @@ class AsanaGetTaskService:
     )
     SCOPE_FIELDS = 'projects.gid,workspace.gid'
 
-    def __init__(self, team):
+    def __init__(self):
         self.client = AsanaApiClientService()
-        self.gate = AsanaGateService(team)
+        self.gate = AsanaGateService()
 
     def get_task(self, task_gid, opt_fields=None):
         requested_fields = opt_fields or self.DEFAULT_FIELDS

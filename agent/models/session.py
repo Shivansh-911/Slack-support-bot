@@ -11,7 +11,6 @@ class Session(models.Model):
         RUNNING = 'running', 'Running'
         IDLE = 'idle', 'Idle'
 
-    name = models.CharField(max_length=64, blank=True, default='')
     team_id = models.CharField(max_length=64, blank=True, default='')
     channel_id = models.CharField(max_length=64, blank=True, default='')
     thread_ts = models.CharField(max_length=64, blank=True, default='')

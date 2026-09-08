@@ -13,9 +13,9 @@ class AsanaGetProjectTaskCountsService:
         'num_milestones,num_incomplete_milestones,num_completed_milestones'
     )
 
-    def __init__(self, team):
+    def __init__(self):
         self.client = AsanaApiClientService()
-        self.gate = AsanaGateService(team)
+        self.gate = AsanaGateService()
 
     def get_project_task_counts(self, project_gid):
         if not self.gate.is_project_allowed(project_gid):

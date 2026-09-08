@@ -17,6 +17,7 @@ trade-off as SlackChannelResolverService: a channel renamed after this
 process started won't resolve under its new name until the next restart.
 """
 
+from django.conf import settings
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -24,8 +25,8 @@ from slack_sdk.errors import SlackApiError
 
 class SlackChannelService:
 
-    def _fetch_id_to_name(self, slack_user_token):
-        client = WebClient(token=slack_user_token)
+    def _fetch_id_to_name(self):
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
         mapping = {}
         cursor = None
         try:
@@ -39,7 +40,7 @@ class SlackChannelService:
                     name = channel.get('name')
                     channel = channel.get('id')
                     if name and channel:
-                        if channel == 'C0BJN116WQ5' or channel == 'C0BM44A3YCW' or channel == 'C0BJV4LF6N7' or channel == 'C03F83XPEJU' or channel == 'C0AU20JFA94':
+                        if channel == 'C03F83XPEJU' or channel == 'C04AFL2GECE' or channel == 'C0APS04G7DM' or channel == 'C0B3LET9YQ4' or channel == 'C0BJN116WQ5' or channel == 'C0BJV4LF6N7' or channel == 'C0BM44A3YCW':
                             continue
                         mapping[channel] = name
                 cursor = response.get('response_metadata', {}).get('next_cursor')
@@ -49,8 +50,8 @@ class SlackChannelService:
             pass
         return mapping
 
-    def get_channel_name(self, channel_id, slack_user_token):
-        client = WebClient(token=slack_user_token)
+    def get_channel_name(self, channel_id):
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
         try:
             response = client.conversations_info(channel=channel_id)
             channel = response.get('channel')

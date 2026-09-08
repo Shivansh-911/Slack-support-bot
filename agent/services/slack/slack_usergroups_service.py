@@ -5,14 +5,15 @@ Mirrors SlackChannelMembersService: member IDs come back bare, not names —
 pair with SlackUserProfileService for any ID that needs a name.
 """
 
+from django.conf import settings
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 
 class SlackUserGroupsService:
 
-    def list_with_members(self, slack_user_token):
-        client = WebClient(token=slack_user_token)
+    def list_with_members(self):
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
         try:
             response = client.usergroups_list(include_count=True, include_disabled=False)
         except SlackApiError as error:

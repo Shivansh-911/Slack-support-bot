@@ -10,9 +10,9 @@ from agent.services.asana.asana_scope_service import AsanaScopeService
 class AsanaGetTasksForTagService:
     FIELDS = 'name,completed,assignee.name,due_on,permalink_url'
 
-    def __init__(self, team):
+    def __init__(self):
         self.client = AsanaApiClientService()
-        self.scope = AsanaScopeService(team)
+        self.scope = AsanaScopeService()
 
     def get_tasks_for_tag(self, tag_gid, opt_fields=None):
         if not self.scope.is_tag_allowed(tag_gid):

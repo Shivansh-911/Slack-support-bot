@@ -39,17 +39,7 @@ class SlackConversationRepliesFormatter:
         reply_count = message.get('reply_count')
         if reply_count:
             header += f" · {reply_count} repl{'y' if reply_count == 1 else 'ies'}"
-        reactions = message.get('reactions')
-        if reactions:
-            header += f" · reactions: {self._reactions(reactions)}"
         return header
-
-    def _reactions(self, reactions):
-        return ', '.join(
-            f":{reaction.get('name', '')}: {reaction.get('count', 0)} "
-            f"({', '.join(reaction.get('users', []))})"
-            for reaction in reactions
-        )
 
 
 __all__ = ['SlackConversationRepliesFormatter']

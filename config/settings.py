@@ -149,7 +149,7 @@ ASANA_ACCESS_TOKEN = env('ASANA_ACCESS_TOKEN')
 # https://platform.claude.com/docs/en/managed-agents/overview
 
 ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY')
-# CMA_AGENT_ID = env('CMA_AGENT_ID')  # replaced by per-team Teams.cma_agent_id
+CMA_AGENT_ID = env('CMA_AGENT_ID')
 CMA_ENVIRONMENT_ID = env('CMA_ENVIRONMENT_ID')
 CMA_VAULT_ID = env('CMA_VAULT_ID')
 CMA_SESSION_BUDGET_CENTS = env.int('CMA_SESSION_BUDGET_CENTS', default=200)

@@ -11,9 +11,9 @@ from agent.services.asana.asana_scope_service import AsanaScopeService
 class AsanaGetSubtasksService:
     FIELDS = 'name,completed,assignee.name,due_on'
 
-    def __init__(self, team):
+    def __init__(self):
         self.client = AsanaApiClientService()
-        self.scope = AsanaScopeService(team)
+        self.scope = AsanaScopeService()
 
     def get_subtasks(self, task_gid):
         if not self.scope.is_task_allowed(task_gid):

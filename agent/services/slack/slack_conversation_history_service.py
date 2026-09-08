@@ -17,6 +17,7 @@ the `search_whitelisted_channels` hallucination bug (mangled Python-repr
 JSON from a bare `json.dumps` fallback).
 """
 
+from django.conf import settings
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -31,10 +32,10 @@ class SlackConversationHistoryService:
         'pinned_item', 'unpinned_item',
     }
 
-    def history(self, channel, include_activity_messages, cursor, oldest, latest, slack_user_token):
+    def history(self, channel, include_activity_messages, cursor, oldest, latest):
         if not channel:
             return {'error': 'channel is required.'}
-        client = WebClient(token=slack_user_token)
+        client = WebClient(token=settings.SLACK_USER_TOKEN)
         params = {'channel': channel, 'limit': self.PAGE_SIZE}
         if cursor:
             params['cursor'] = cursor

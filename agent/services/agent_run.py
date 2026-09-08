@@ -1,16 +1,10 @@
 """Handles inbound agent run requests raised from Slack events.
 
-Confirmable tool calls (`agent.mcp_tool_use`) go through `AgentMcpToolGateService`,
+Confirmable tool calls (`agent.mcp_tool_use`) go through `AgentToolGateService`,
 which allows or denies based on the channel whitelist. Custom tool calls
-(`agent.custom_tool_use`) go through `AgentAsanaCustomToolService`/
-`AgentslackCustomToolService` instead, which actually execute the tool — unlike
-MCP tools, nothing runs a custom tool but the client, so there is no
-confirmation step to gate.
-
-`team` and `all_channels` come from the caller (SlackEventListenerService),
-which has already resolved which team this message belongs to and fetched
-that team's live channel whitelist — this file never re-derives either one,
-so there is exactly one place per run that decides team scope.
+(`agent.custom_tool_use`) go through `AgentCustomToolService` instead, which
+actually executes the tool — unlike MCP tools, nothing runs a custom tool but
+the client, so there is no confirmation step to gate.
 
 `agent.message` text is buffered as it streams, never posted as it arrives —
 the caller only gets back the single final answer once the run ends, so it
@@ -25,14 +19,21 @@ from agent.services.anthropic_client_service import AnthropicClientService
 from agent.services.agent_session_create_service import AgentSessionCreateService
 from agent.services.agent_mcp_tool_gate_service import AgentMcpToolGateService
 from agent.services.slack.agent_slack_custom_tool_service import AgentslackCustomToolService
+from agent.services.slack.slack_channel_service import SlackChannelService
 from agent.services.asana.agent_asana_custom_tool_service import AgentAsanaCustomToolService
+from config import settings
 
 
 class AgentRunService:
     REQUIRES_ACTION = 'requires_action'
+    channel_mapping = None 
 
-    def handle_run(self, channel_id, thread_ts, team_id, user_id, question, message_ts, trigger_type, team, all_channels):
-        session = Session.objects.existing_session(team_id, channel_id, thread_ts)
+    def handle_run(self, channel_id, thread_ts, team_id, user_id, question, message_ts, trigger_type):
+        self.channel_mapping = SlackChannelService()._fetch_id_to_name()
+
+        print(self.channel_mapping)
+
+        session = Session.objects.find_by_thread(team_id, channel_id, thread_ts)
         if session and session.status == Session.Status.RUNNING:
             raise SessionBusyError(session)
 
@@ -42,41 +43,40 @@ class AgentRunService:
         session_id = None
         if session and session.cma_session_id:
             session_id = agent_session_create_service._reuse(client, session.cma_session_id)
-
-        if session_id is None:
-            session_id = agent_session_create_service._create(client, channel_id, thread_ts, team)
-            session = Session.objects.create(team_id, channel_id, thread_ts, session_id, team.name)
+            #session_id can be null if terminated session, need to handle that
+        else:
+            session_id = agent_session_create_service._create(client, channel_id, thread_ts)
+            session = Session.objects.create(team_id, channel_id, thread_ts, session_id)
 
         try:
             Session.objects.mark_running(session)
             return self._drive(
-                client, session_id, channel_id, thread_ts, user_id, question, message_ts,
-                trigger_type, team, all_channels,
+                client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type
             )
         finally:
-            session_details = client.beta.sessions.retrieve(session_id=session_id)
+            session_details = client.beta.sessions.retrieve(session_id=session.cma_session_id)
             Session.objects.session_stop(session, session_details)
+            # Session.objects.mark_idle(session)
 
-    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type, team, all_channels):
+    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type):
         tool_gate = AgentMcpToolGateService()
-        slack_tool_service = AgentslackCustomToolService(team)
-        asana_tool_service = AgentAsanaCustomToolService(team)
         final_text_blocks = []
 
         with client.beta.sessions.events.stream(session_id) as stream:
+
 
             self._send(client, session_id, {
                 "type": "user.message",
                 "content": [{
                     "type": "text",
                     "text": self._context_message(
-                        channel_id, thread_ts, user_id, question, message_ts, trigger_type, all_channels, team
+                        channel_id, thread_ts, user_id, question, message_ts, trigger_type
                     ),
                 }],
             })
 
             for event in stream:
-                reply = self._handle_event(event, tool_gate, slack_tool_service, asana_tool_service, all_channels)
+                reply = self._handle_event(event, tool_gate)
                 if reply is not None:
                     self._send(client, session_id, reply)
                 if event.type == 'agent.message':
@@ -89,12 +89,8 @@ class AgentRunService:
     def _send(self, client, session_id, event):
         return client.beta.sessions.events.send(session_id, events=[event])
 
-    def _context_message(self, channel_id, thread_ts, user_id, question, message_ts, trigger_type, all_channels, team):
+    def _context_message(self, channel_id, thread_ts, user_id, question, message_ts, trigger_type):
         return (
-            "[Scope for this run — everything you may access]\n"
-            f"Allowed Slack channels: {all_channels}\n"
-            f"Allowed Asana workspace: {team.asana_workspace_gid}\n"
-            f"Allowed Asana projects: {team.asana_project_gids}\n\n"
             "[Slack context — where this question was posted, not where to search]\n"
             f"channel_id: {channel_id}\n"
             f"thread_ts: {thread_ts}\n"
@@ -109,20 +105,18 @@ class AgentRunService:
             "itself names that channel (or says \"this channel,\" \"here,\" etc.).\n\n"
             "[Question]\n"
             f"{question}\n\n"
-
+    
             "[Reminders]\n"
-            "- Before writing the final answer, read the standing-instructions "
-            "memory store in full — every time, even if you already read it "
-            "earlier in this session — and shape tone/format/length to match "
-            "what it says. Do this before reconciling anything else.\n"
-            "- Also reconcile relevant memory for this channel, thread, and "
-            "user. Treat memory as context that may be incomplete or stale, "
-            "and prioritize the current conversation when the two conflict.\n"
+            "- Before writing the final answer, reconcile relevant memory for "
+            "this channel, thread, and user. Treat memory as context that may "
+            "be incomplete or stale, and prioritize the current conversation "
+            "when the two conflict.\n"
             "- Don't include any memory-reconciliation marker or internal "
             "reasoning in the final answer.\n"
             "- Only your last message this turn reaches the user — anything "
             "said earlier in the turn is discarded, not shown."
         )
+
 
     def _current_datetime(self):
         # Minute-level precision, fixed UTC label (settings.TIME_ZONE) — no
@@ -130,14 +124,16 @@ class AgentRunService:
         # rather than remove it.
         return timezone.now().strftime('%Y-%m-%d %H:%M UTC (%A)')
 
-    def _handle_event(self, event, tool_gate, slack_tool_service, asana_tool_service, all_channels):
+    def _handle_event(self, event, tool_gate):
         if event.type == 'agent.mcp_tool_use':
-            return tool_gate.handle_mcp_tool_use(event, all_channels)
+            return tool_gate.handle_mcp_tool_use(event, self.channel_mapping)
         elif event.type == 'agent.custom_tool_use':
-            if asana_tool_service.handles(event.name):
-                return asana_tool_service.handle_custom_tool_use(event)
-            if slack_tool_service.handles(event.name):
-                return slack_tool_service.handle_custom_tool_use(event, all_channels)
+            asana_custom_tool_service = AgentAsanaCustomToolService()
+            if asana_custom_tool_service.handles(event.name):
+                return asana_custom_tool_service.handle_custom_tool_use(event)
+            slack_custom_tool_service = AgentslackCustomToolService()
+            if slack_custom_tool_service.handles(event.name):
+                return slack_custom_tool_service.handle_custom_tool_use(event, self.channel_mapping)
         return None
 
     def _is_finished(self, event):
@@ -156,4 +152,4 @@ class AgentRunService:
         ]
 
 
-__all__ = ['AgentRunService']
+

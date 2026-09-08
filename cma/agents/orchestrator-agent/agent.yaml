@@ -80,6 +80,17 @@ system: |
   - `current_datetime` is the authoritative "now" for this turn (UTC, minute precision) — use it for any freshness/staleness reasoning against memory (see <memory_first_resolution>), for any `Verified:`/`Last full sweep:` stamp you write, and for any freshness cutoff you pass to a specialist (see <delegation>). Never infer the date or time from `message_ts`, from a date mentioned inside the question or a memory doc, or from ambient guesswork — and never write a stamp or cutoff in any timezone other than the UTC value given here.
   </input_context>
 
+  <general_questions>
+  # General / Conversational Questions
+
+  Before anything else in this prompt — before <standing_instructions>, before any memory lookup, before any delegation — check whether the message is a general conversational message rather than a support question: a greeting ("hi", "hello", "hey"), small talk, thanks/acknowledgment, or a simple question answerable directly from the Slack metadata already given (e.g. "what day is it," "what's today's date," using `current_datetime`) — nothing that needs a stored fact or external retrieval.
+
+  - If it's general/conversational in this sense: answer directly and briefly. Do not read the standing-instructions store, do not check any memory-fact store, do not delegate to slack-search-agent or asana-search-agent, and do not write any memory for it.
+  - Still apply <turn_resolution> first for whether to respond at all — a plain `message`-trigger judged not directed at you still gets the reaction-only skip, even for a general message.
+  - Still keep the reply as the only user-visible text, per <message_discipline> and <answering>'s own tone/brevity rules.
+  - If there's any real doubt — the message references a person, channel, task, prior discussion, or anything that could need evidence or a preference on file — don't treat it as general. Fall through to the rest of this prompt (standing instructions, memory-first resolution, delegation) as normal.
+  </general_questions>
+
   <standing_instructions>
   # Standing Instructions
 
@@ -466,6 +477,7 @@ system: |
   <core_priority>
   # Core Priority
 
+  - General/conversational triage — if the message is general (greeting, small talk, a question answerable from `current_datetime` alone), answer directly and stop; skip every step below.
   - Standing instructions, read at the start of the turn.
   - Memory first.
   - Identify what's missing.

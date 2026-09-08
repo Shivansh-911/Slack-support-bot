@@ -51,6 +51,7 @@ class SlackEventListenerService:
     TRIGGER_MENTION = 'mention'
     TRIGGER_MESSAGE = 'message'
     CHANNEL_GATE_EXEMPT_CHANNELS = {'C0BJV4LF6N7', 'C0BJN116WQ5', 'C0BM44A3YCW'}
+    INTERNAL_NOTIFICATION_MARKERS = ('<agent-notification>', 'agent_message_received')
 
     def register(self, bolt_app):
         bolt_app.middleware(self.archive_event)
@@ -96,9 +97,21 @@ class SlackEventListenerService:
 
         self._react(channel_id, message_ts, team.slack_user_token)
 
+        stream_message_ts = None
+
+        def on_agent_message(text):
+            nonlocal stream_message_ts
+            if self._is_internal_notification(text):
+                logger.warning('Dropped leaked internal notification text instead of posting it to Slack')
+                return
+            if stream_message_ts is None:
+                stream_message_ts = self._post(channel_id, thread_ts, text, team.slack_user_token)
+            else:
+                self._update(channel_id, stream_message_ts, text, team.slack_user_token)
+
         agent_run_service = AgentRunService()
         try:
-            answer = agent_run_service.handle_run(
+            agent_run_service.handle_run(
                 channel_id,
                 thread_ts,
                 slack_team_id,
@@ -107,18 +120,23 @@ class SlackEventListenerService:
                 message_ts,
                 trigger_type,
                 team,
-                all_channels
+                all_channels,
+                on_agent_message,
             )
         except SessionBusyError:
             self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token)
             return
-        if answer:
-            self._post(channel_id, thread_ts, answer, team.slack_user_token)
+
+        if stream_message_ts is None:
+            self._post(channel_id, thread_ts, '', team.slack_user_token)
 
         # answer = self._debug_run_summary(
             # channel_id, thread_ts, slack_team_id, user_id, question, message_ts, trigger_type, team, all_channels
         # )
         # self._post(channel_id, thread_ts, answer, team.slack_user_token)
+
+    def _is_internal_notification(self, text):
+        return any(marker in text for marker in self.INTERNAL_NOTIFICATION_MARKERS)
 
     def _debug_run_summary(self, channel_id, thread_ts, slack_team_id, user_id, question, message_ts, trigger_type, team, all_channels):
         return (
@@ -167,9 +185,23 @@ class SlackEventListenerService:
         formatted = SlackMarkdownFormatter().format(text) or self.EMPTY_ANSWER_MESSAGE
         client = WebClient(token=slack_user_token)
         try:
-            client.chat_postMessage(
+            response = client.chat_postMessage(
                 channel=channel_id,
                 thread_ts=thread_ts,
+                text=formatted,
+            )
+            return response.get('ts')
+        except SlackApiError as error:
+            logger.warning('Could not post message: %s', error)
+            return None
+
+    def _update(self, channel_id, ts, text, slack_user_token):
+        formatted = SlackMarkdownFormatter().format(text) or self.EMPTY_ANSWER_MESSAGE
+        client = WebClient(token=slack_user_token)
+        try:
+            client.chat_update(
+                channel=channel_id,
+                ts=ts,
                 text=formatted,
             )
         except SlackApiError as error:

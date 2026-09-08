@@ -264,9 +264,35 @@ class SlackAPI:
 
         return formatted
 
+    def post_message(self):
+        text = "updated ??"
+        client = WebClient(token=settings.SLACK_BOT_TOKEN)
+        try:
+            client.chat_postMessage(
+                channel="C0BM44A3YCW",
+                ts="1788849297.781399",
+                text=text,
+            )
+        except SlackApiError as error:
+            pass
+    
+    def update_message(self):
+        text = "updated ??kajsndkajs"
+        client = WebClient(token=settings.SLACK_BOT_TOKEN)
+        try:
+            client.chat_update(
+                channel="C0BM44A3YCW",
+                ts="1788848938.940239",
+                text=text,
+            )
+        except SlackApiError as error:
+            pass
+
+        
+
     def main(self):
         # return self.list_repiles()
-        return self.fetch()
+        return self.update_message()
 
 
 if __name__ == "__main__":

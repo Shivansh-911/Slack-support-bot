@@ -1,9 +1,10 @@
-"""Resolves an Asana tag, section, or task gid to the workspace/project gid that
+"""Resolves an Asana tag, section, task, or user gid to the workspace/project gid that
 actually governs its whitelist membership, then checks it via AsanaGateService.
 
-A tag only carries a workspace, a section only carries a project, and a task carries
-neither on its compact `/tasks/{gid}` record — each is resolved with one extra read
-before the whitelist check, failing closed if that lookup itself errors.
+A tag only carries a workspace, a section only carries a project, a task carries
+neither on its compact `/tasks/{gid}` record, and a user carries a list of workspace
+memberships instead of a single one — each is resolved with one extra read before the
+whitelist check, failing closed if that lookup itself errors.
 """
 
 from agent.exceptions import AsanaApiError
@@ -40,6 +41,14 @@ class AsanaScopeService:
 
     def allowed_task_gids(self, task_gids):
         return [task_gid for task_gid in task_gids if self.is_task_allowed(task_gid)]
+
+    def is_user_allowed(self, user_gid):
+        try:
+            user = self.client.get(f'/users/{user_gid}', {'opt_fields': 'workspaces'})
+        except AsanaApiError:
+            return False
+        workspace_gids = [workspace.get('gid') for workspace in user.get('workspaces') or []]
+        return any(self.gate.is_workspace_allowed(gid) for gid in workspace_gids)
 
     def _task_payload_in_scope(self, task):
         project_gids = [project.get('gid') for project in task.get('projects') or []]

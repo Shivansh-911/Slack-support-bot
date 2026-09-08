@@ -6,8 +6,3 @@ db.sqlite3
 cma/skills/.manifest.json
 teams_seed.json
 tests/
-
-tests
-tests/slackapiresp.py
-tests/asanaapi.py
-tests/anthropicapi.py

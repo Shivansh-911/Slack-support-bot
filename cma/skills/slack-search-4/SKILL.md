@@ -53,8 +53,6 @@ After each call, judge every result against the topic asked — not the project,
 
 If the question itself asks for something broad or comprehensive, breadth is the actual ask — don't narrow it to one sub-topic. Otherwise, stop the instant a step stops surfacing on-topic material; don't search further just because more results might exist. Preserve explicit constraints (channel/time/person) through refinement. A tool error is not evidence of absence.
 
-**Hard ceiling: max 6 `search_whitelisted_channels` calls per question, no exceptions** — refinements and pagination count against it, and this applies even to a comprehensive/"everything" ask. Track your call count. At 6, stop and answer from what you have rather than issuing a 7th call; note any gap instead of searching further. This ceiling doesn't apply to `conversations_replies`, `conversations_history`, or the resolution tools (`list_channels`, `get_user_profile`, `list_usergroups`).
-
 ## 6. Answer
 
 Attribute using both real name and user_id together. Only name someone as involved if an included, on-topic fact ties them to it — not because they were active in the same channel or project. Don't claim something doesn't exist unless resolution actually failed to find it.

@@ -96,18 +96,9 @@ class SlackEventListenerService:
 
         self._react(channel_id, message_ts, team.slack_user_token)
 
-        stream_message_ts = None
-
-        def on_agent_message(text):
-            nonlocal stream_message_ts
-            if stream_message_ts is None:
-                stream_message_ts = self._post(channel_id, thread_ts, text, team.slack_user_token)
-            else:
-                self._update(channel_id, stream_message_ts, text, team.slack_user_token)
-
         agent_run_service = AgentRunService()
         try:
-            agent_run_service.handle_run(
+            answer = agent_run_service.handle_run(
                 channel_id,
                 thread_ts,
                 slack_team_id,
@@ -116,34 +107,32 @@ class SlackEventListenerService:
                 message_ts,
                 trigger_type,
                 team,
-                all_channels,
-                on_agent_message,
+                all_channels
             )
         except SessionBusyError:
             self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token)
             return
-
-        if stream_message_ts is None:
-            self._post(channel_id, thread_ts, '', team.slack_user_token)
+        if answer:
+            self._post(channel_id, thread_ts, answer, team.slack_user_token)
 
         # answer = self._debug_run_summary(
             # channel_id, thread_ts, slack_team_id, user_id, question, message_ts, trigger_type, team, all_channels
         # )
         # self._post(channel_id, thread_ts, answer, team.slack_user_token)
 
-    # def _debug_run_summary(self, channel_id, thread_ts, slack_team_id, user_id, question, message_ts, trigger_type, team, all_channels):
-    #     return (
-    #         f'channel_id: {channel_id}\n'
-    #         f'thread_ts: {thread_ts}\n'
-    #         f'slack_team_id: {slack_team_id}\n'
-    #         f'user_id: {user_id}\n'
-    #         f'question: {question}\n'
-    #         f'message_ts: {message_ts}\n'
-    #         f'trigger_type: {trigger_type}\n'
-    #         f'team: {team.name}\n'
-    #         f'memory_stores: {team.cma_memory_id} and {team.cma_instructions_memory_id}\n'
-    #         f'all_channels: {all_channels}'
-    #     )
+    def _debug_run_summary(self, channel_id, thread_ts, slack_team_id, user_id, question, message_ts, trigger_type, team, all_channels):
+        return (
+            f'channel_id: {channel_id}\n'
+            f'thread_ts: {thread_ts}\n'
+            f'slack_team_id: {slack_team_id}\n'
+            f'user_id: {user_id}\n'
+            f'question: {question}\n'
+            f'message_ts: {message_ts}\n'
+            f'trigger_type: {trigger_type}\n'
+            f'team: {team.name}\n'
+            f'memory_stores: {team.cma_memory_id} and {team.cma_instructions_memory_id}\n'
+            f'all_channels: {all_channels}'
+        )
 
     def _resolve_mention(self, text):
         for slack_user_id in Teams.objects.get_team_ids():
@@ -178,29 +167,13 @@ class SlackEventListenerService:
         formatted = SlackMarkdownFormatter().format(text) or self.EMPTY_ANSWER_MESSAGE
         client = WebClient(token=slack_user_token)
         try:
-            response = client.chat_postMessage(
+            client.chat_postMessage(
                 channel=channel_id,
                 thread_ts=thread_ts,
                 text=formatted,
             )
-            return response.get('ts')
         except SlackApiError as error:
             logger.warning('Could not post message: %s', error)
-            return None
-    
-    def _update(self, channel_id, ts, text, slack_user_token):
-        formatted = SlackMarkdownFormatter().format(text) or self.EMPTY_ANSWER_MESSAGE
-        client = WebClient(token=slack_user_token)
-        try:
-            client.chat_update(
-                channel=channel_id,
-                ts=ts,
-                text=formatted,
-            )
-        except SlackApiError as error:
-            logger.warning('Could not post message: %s', error)
-
-    
 
 
 __all__ = ['SlackEventListenerService']

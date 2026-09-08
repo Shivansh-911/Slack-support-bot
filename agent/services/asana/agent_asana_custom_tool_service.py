@@ -10,6 +10,12 @@ a bespoke per-tool format — the shapes returned by these 18 endpoints vary too
 hand-written renderers to be worth the risk of a field-name mismatch; JSON is exact and
 still perfectly readable by the agent. Whitelist enforcement happens inside each service
 itself, before Asana is ever called, not here.
+
+asana_get_project_status is intentionally not wired in here — its gid carries no
+project/workspace reference, so there's no code-level check to perform for it (see
+asana_get_project_status_service.py's docstring). The service class is left in the
+codebase untouched; only its dispatch entry point is removed, pending a session-scoped
+fix.
 """
 
 import json

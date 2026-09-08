@@ -117,6 +117,7 @@ class SlackAPI:
 
     def userinfo(self):
         client = WebClient(token=settings.SLACK_BOT_TOKEN)   
+        client = WebClient(token=settings.SLACK_BOT_TOKEN)   
 
         try:
             response = client.users_info(
@@ -145,6 +146,8 @@ class SlackAPI:
                     name = channel_resp.get('name')
                     channel = channel_resp.get('id')
                     if name and channel:
+                        if channel == 'C03F83XPEJU' or channel == 'C04AFL2GECE' or channel == 'C0APS04G7DM' or channel == 'C0B3LET9YQ4' or channel == 'C0BJN116WQ5' or channel == 'C0BJV4LF6N7' or channel == 'C0BM44A3YCW':
+                            continue
                         if channel == 'C03F83XPEJU' or channel == 'C04AFL2GECE' or channel == 'C0APS04G7DM' or channel == 'C0B3LET9YQ4' or channel == 'C0BJN116WQ5' or channel == 'C0BJV4LF6N7' or channel == 'C0BM44A3YCW':
                             continue
                         mapping[channel] = name

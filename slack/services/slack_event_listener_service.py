@@ -52,7 +52,10 @@ class SlackEventListenerService:
     TRIGGER_MENTION = 'mention'
     TRIGGER_MESSAGE = 'message'
     CHANNEL_GATE_EXEMPT_CHANNELS = {'C0BJV4LF6N7', 'C0BJN116WQ5', 'C0BM44A3YCW'}
-    INTERNAL_NOTIFICATION_MARKERS = ('<agent-notification>', 'agent_message_received')
+    INTERNAL_NOTIFICATION_MARKERS = (
+        '<agent-notification', 'agent_message_received', '</agent-notification>', '</parameter>',
+        '<invoke', '</invoke>', '<parameter', '<tool_use', '</tool_use>',
+    )
 
     def register(self, bolt_app):
         bolt_app.middleware(self.archive_event)
@@ -116,7 +119,7 @@ class SlackEventListenerService:
             if stream_message_ts is None:
                 stream_message_ts = self._post(channel_id, thread_ts, text, team.slack_user_token, channel_type, team.name)
             else:
-                self._update(channel_id, stream_message_ts, text, team.slack_user_token)
+                self._update(channel_id, stream_message_ts, text, team.slack_user_token, channel_type, team.name)
 
         agent_run_service = AgentRunService()
         try:
@@ -209,9 +212,12 @@ class SlackEventListenerService:
             logger.warning('Could not post message: %s', error)
             return None
 
-    def _update(self, channel_id, ts, text, slack_user_token):
+    def _update(self, channel_id, ts, text, slack_token, channel_type, name):
+        if channel_type == 'im':
+            slack_token = settings.SLACK_BOT_TOKEN
+            text = text + f"\n({name})"
         formatted = SlackMarkdownFormatter().format(text) or self.EMPTY_ANSWER_MESSAGE
-        client = WebClient(token=slack_user_token)
+        client = WebClient(token=slack_token)
         try:
             client.chat_update(
                 channel=channel_id,

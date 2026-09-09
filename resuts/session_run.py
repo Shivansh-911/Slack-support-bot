@@ -36,7 +36,7 @@ class SessionRunExporter:
 
 
 if __name__ == '__main__':
-    SessionRunExporter(session_id='sesn_01PVEDwXTMKmSZfLqcRY9Pm8').export()
+    SessionRunExporter(session_id='sesn_01Y8aJwMFAKxPTb7T7LnRYgf').export()
 
 
 __all__ = ['SessionRunExporter']

@@ -29,6 +29,7 @@ ignored the same way.
 import logging
 import re
 
+from config import settings
 from slack_bolt.response import BoltResponse
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -67,12 +68,20 @@ class SlackEventListenerService:
     def handle_message(self, ack, event, client, body):
         ack()
 
+        print(event)
+
         text = event.get('text') or ''
         channel_id = event.get('channel')
         slack_team_id = body.get('team_id')
         thread_ts = event.get('thread_ts') or event.get('ts')
         message_ts = event.get('ts')
         user_id = event.get('user')
+        channel_type = event.get('channel_type')
+
+        # if channel_type == "im":
+            # self._post(channel_id, thread_ts, "messafe", settings.SLACK_BOT_TOKEN)
+
+        
 
         if user_id in Teams.objects.get_team_ids():
             return
@@ -87,15 +96,15 @@ class SlackEventListenerService:
                 return
             trigger_type = self.TRIGGER_MESSAGE
             question = text
-
+ 
         all_channels = SlackChannelService()._fetch_id_to_name(team.slack_user_token)
-        if channel_id in self.CHANNEL_GATE_EXEMPT_CHANNELS:
-            pass
-        else:
-            if channel_id not in all_channels:
-                return
+        # if channel_type == 'im' or channel_id in self.CHANNEL_GATE_EXEMPT_CHANNELS:
+        #     pass
+        # else:
+        #     if channel_id not in all_channels:
+        #         return
 
-        self._react(channel_id, message_ts, team.slack_user_token)
+        self._react(channel_id, message_ts, team.slack_user_token, channel_type)
 
         stream_message_ts = None
 
@@ -105,7 +114,7 @@ class SlackEventListenerService:
                 logger.warning('Dropped leaked internal notification text instead of posting it to Slack')
                 return
             if stream_message_ts is None:
-                stream_message_ts = self._post(channel_id, thread_ts, text, team.slack_user_token)
+                stream_message_ts = self._post(channel_id, thread_ts, text, team.slack_user_token, channel_type, team.name)
             else:
                 self._update(channel_id, stream_message_ts, text, team.slack_user_token)
 
@@ -124,11 +133,11 @@ class SlackEventListenerService:
                 on_agent_message,
             )
         except SessionBusyError:
-            self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token)
+            self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token, channel_type, team.name)
             return
 
         if stream_message_ts is None:
-            self._post(channel_id, thread_ts, '', team.slack_user_token)
+            self._post(channel_id, thread_ts, '', team.slack_user_token, channel_type, team.name)
 
         # answer = self._debug_run_summary(
             # channel_id, thread_ts, slack_team_id, user_id, question, message_ts, trigger_type, team, all_channels
@@ -167,8 +176,10 @@ class SlackEventListenerService:
     def acknowledge_unhandled_event(self, ack):
         ack()
 
-    def _react(self, channel_id, message_ts, slack_user_token):
-        client = WebClient(token=slack_user_token)
+    def _react(self, channel_id, message_ts, slack_token, channel_type):
+        if channel_type == 'im':
+            slack_token = settings.SLACK_BOT_TOKEN
+        client = WebClient(token=slack_token)
         try:
             client.reactions_add(
                 channel=channel_id,
@@ -181,9 +192,12 @@ class SlackEventListenerService:
     def _strip_mention(self, text, slack_user_id):
         return re.sub(f'<@{slack_user_id}>', '', text or '').strip()
 
-    def _post(self, channel_id, thread_ts, text, slack_user_token):
+    def _post(self, channel_id, thread_ts, text, slack_token, channel_type, name):
+        if channel_type == 'im':
+            slack_token = settings.SLACK_BOT_TOKEN
+            text = text + f"\n({name})"
         formatted = SlackMarkdownFormatter().format(text) or self.EMPTY_ANSWER_MESSAGE
-        client = WebClient(token=slack_user_token)
+        client = WebClient(token=slack_token)
         try:
             response = client.chat_postMessage(
                 channel=channel_id,

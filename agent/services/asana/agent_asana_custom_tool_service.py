@@ -1,9 +1,9 @@
-"""Executes the 17 read-only Asana custom tools and builds the
+"""Executes the 19 read-only Asana custom tools and builds the
 `user.custom_tool_result` reply for each — the Asana counterpart to
 AgentCustomToolService, which delegates any tool name this class `handles()` to it.
 
 Kept as its own class (rather than folded into AgentCustomToolService alongside the
-Slack tools) because 17 handlers plus the Slack ones in one file would blow past a
+Slack tools) because 19 handlers plus the Slack ones in one file would blow past a
 single responsibility. Every successful result is rendered as indented JSON rather than
 a bespoke per-tool format — the shapes returned by these 17 endpoints vary too much
 (projects, tasks, tags, sections, statuses, stories, counts, workspaces) for one set of
@@ -38,6 +38,8 @@ from agent.services.asana.asana_get_tags_for_workspace_service import AsanaGetTa
 from agent.services.asana.asana_get_subtasks_service import AsanaGetSubtasksService
 from agent.services.asana.asana_get_tasks_for_project_service import AsanaGetTasksForProjectService
 from agent.services.asana.asana_get_my_tasks_service import AsanaGetMyTasksService
+from agent.services.asana.asana_get_user_service import AsanaGetUserService
+from agent.services.asana.asana_get_users_for_workspace_service import AsanaGetUsersForWorkspaceService
 
 
 class AgentAsanaCustomToolService:
@@ -62,6 +64,8 @@ class AgentAsanaCustomToolService:
             'asana_get_subtasks': self._handle_get_subtasks,
             'asana_get_tasks_for_project': self._handle_get_tasks_for_project,
             'asana_get_my_tasks': self._handle_get_my_tasks,
+            'asana_get_user': self._handle_get_user,
+            'asana_get_users_for_workspace': self._handle_get_users_for_workspace,
         }
 
     def handles(self, tool_name):
@@ -163,6 +167,18 @@ class AgentAsanaCustomToolService:
         result = AsanaGetMyTasksService(self.team).get_my_tasks(
             event.input.get('workspace_gid'),
             completed_since=event.input.get('completed_since'),
+            opt_fields=event.input.get('opt_fields'),
+            limit=event.input.get('limit', 100),
+        )
+        return self._reply(event, result)
+
+    def _handle_get_user(self, event):
+        result = AsanaGetUserService(self.team).get_user(event.input.get('user_gid'))
+        return self._reply(event, result)
+
+    def _handle_get_users_for_workspace(self, event):
+        result = AsanaGetUsersForWorkspaceService(self.team).get_users_for_workspace(
+            event.input.get('workspace_gid'),
             opt_fields=event.input.get('opt_fields'),
             limit=event.input.get('limit', 100),
         )

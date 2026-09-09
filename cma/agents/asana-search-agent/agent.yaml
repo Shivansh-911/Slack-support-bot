@@ -352,6 +352,47 @@ tools:
       required:
         - workspace_gid
 
+  - type: custom
+    name: asana_get_user
+    description: >-
+      Look up a single Asana user's name, email, and workspace memberships.
+      Accepts a numeric user gid, an email address, or "me" for the
+      connection's own identity. Fails if none of the user's workspaces are
+      whitelisted.
+      If you have not yet read the asana-search skill this conversation,
+      read it with the read tool before this call.
+    input_schema:
+      type: object
+      properties:
+        user_gid:
+          type: string
+          description: A user gid, email address, or "me".
+      required:
+        - user_gid
+
+  - type: custom
+    name: asana_get_users_for_workspace
+    description: >-
+      List every user in a whitelisted workspace — up to 2000, sorted
+      alphabetically. Use this to resolve a name to a user gid, or to see
+      who has access to the workspace.
+      If you have not yet read the asana-search skill this conversation,
+      read it with the read tool before this call.
+    input_schema:
+      type: object
+      properties:
+        workspace_gid:
+          type: string
+          description: A whitelisted Asana workspace gid.
+        opt_fields:
+          type: string
+          description: Comma-separated Asana opt_fields to return, in place of the default set.
+        limit:
+          type: integer
+          description: Maximum users to fetch (default 100; Asana caps this endpoint at 2000).
+      required:
+        - workspace_gid
+
   # A scratchpad for collating results. The environment has no egress, so
   # these cannot reach the network. `read` is load-bearing: tool outputs over
   # ~100,000 characters are offloaded to a file in the sandbox with only a

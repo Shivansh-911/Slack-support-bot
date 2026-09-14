@@ -71,7 +71,7 @@ class SlackEventListenerService:
     def handle_message(self, ack, event, client, body):
         ack()
 
-        print(event)
+        
 
         text = event.get('text') or ''
         channel_id = event.get('channel')
@@ -106,7 +106,7 @@ class SlackEventListenerService:
         # else:
         #     if channel_id not in all_channels:
         #         return
-
+        print(event)
         self._react(channel_id, message_ts, team.slack_user_token, channel_type)
 
         stream_message_ts = None

@@ -10,5 +10,8 @@
   },
   "s-orhcerstrator-agent": {
     "agent_id": "agent_01N1HRGJpgPp6n4xhjGdnFSq"
+  },
+  "validator-agent": {
+    "agent_id": "agent_01URiHp54aWXPj3hNnD86rAq"
   }
 }

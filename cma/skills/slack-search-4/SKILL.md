@@ -3,27 +3,29 @@ name: slack-search-4
 description: Search Slack via search_whitelisted_channels, the only Slack retrieval tool available. Use for any Slack question — channel activity, who said/decided what, team discussions, incidents, or "check Slack" requests.
 ---
 
-# Slack Context Search Procedure
+# Slack Search Procedure
 
-Flow: check memory → resolve scope → build a narrow, topic-anchored query → search → judge relevance → go deeper only while still relevant → answer.
+Flow: check what the orchestrator's brief already gives you → resolve any still-missing scope → build a narrow, topic-anchored query → search → judge relevance → go deeper only while still relevant → answer, or flag what you couldn't resolve back to the orchestrator.
 
-## 1. Check memory first
+## 1. Check what you were already given
 
-| Fact | Memory first | Tool if missing/stale |
+You have no memory of your own, and no tool that could write one — the orchestrator checks and updates its memory before it ever delegates to you, and passes along whatever it already resolved. The delegation arrives as one free-form message, not structured fields — read the whole thing before resolving anything yourself; it commonly embeds a channel name next to its ID, a person's name next to their user_id, and an explicit date range directly in prose.
+
+| Fact | Check first | Tool if genuinely missing |
 |---|---|---|
-| Channel directory | Check memory | `list_channels` |
-| Person's profile | Check memory | `get_user_profile` |
-| Usergroup directory | Check memory | `list_usergroups` |
+| Channel ID | Already named + IDed anywhere in the message? | *(none — see step 2)* |
+| Person's user_id | Already named + IDed anywhere in the message? | `get_user_profile` |
+| Usergroup ID | Already named + IDed anywhere in the message? | `list_usergroups` |
 
-Cache newly resolved facts back to memory. Case-insensitive check. This never substitutes for a live search of message content.
+Case-insensitive check against the message's own wording. This never substitutes for a live search of message content. A person/usergroup the message doesn't mention isn't itself a gap to fill — it means the delegation wasn't scoped that way; only resolve one when the message's own text actually names it, as a bare name with no ID (see step 2).
 
 ## 2. Resolve scope
 
-**Channel** — only use IDs already known allowlisted or resolved (memory → `list_channels`). Never guess. Non-allowlisted supplied IDs are dropped, not retried; only an all-invalid list errors out.
+**Channel** — there's no channel directory tool and no name↔ID resolution step. A channel_id in the brief always scopes the search. If the question instead names a channel by name with no ID given, don't try to resolve it — put the name directly in the query text (or a `term_clauses` entry) and search unrestricted; `search_whitelisted_channels` already covers only whitelisted channels. Never invent or guess a channel_id.
 
-**Person** — memory first. If you have a user_id, `get_user_profile`. If you only have a name and it's not in memory, there's no name-search tool — put the name directly in the search `query` instead, resolve their ID from the results, then cache it. Only use `list_conversation_members` (expensive) to enumerate a whole channel, never to look up one person.
+**Person** — use a user_id already stated in the brief. If you have a user_id, `get_user_profile`. If you only have a name and no ID was given, there's no name-search tool — put the name directly in the search `query` instead and resolve their ID from the results. You have nowhere to cache it, so re-resolve if the same name comes up again later. Only use `list_conversation_members` (expensive) to enumerate a whole channel, never to look up one person. If a name genuinely turns up no candidate either way, don't guess or proceed unscoped — that's a Clarification needed (per the system prompt's output contract), not something to work around.
 
-**Team/usergroup** — memory first, then `list_usergroups`, matching on handle/name.
+**Team/usergroup** — use an ID already stated in the brief, otherwise `list_usergroups`, matching on handle/name.
 
 ## 3. Build a narrow query
 
@@ -51,10 +53,16 @@ After each call, judge every result against the topic asked — not the project,
 | Mixed on/off-topic | Keep only the on-topic results. |
 | Off-topic or empty | Try one different angle; if that also fails, stop and report no relevant evidence — don't broaden scope to find something. |
 
-If the question itself asks for something broad or comprehensive, breadth is the actual ask — don't narrow it to one sub-topic. Otherwise, stop the instant a step stops surfacing on-topic material; don't search further just because more results might exist. Preserve explicit constraints (channel/time/person) through refinement. A tool error is not evidence of absence.
+If results cluster in one or a few channels you weren't already scoped to, narrow your next calls to just those `channel_ids` — you're not limited to only a channel given in the brief.
+
+Confidence gate: once you're more than 50% confident a specific message/thread contains the answer, stop broad `search_whitelisted_channels` calls entirely — fetch that thread with `conversations_replies` for full context next, then answer (see system prompt's tool_call_discipline).
+
+If the question itself asks for something broad or comprehensive, breadth is the actual ask — don't narrow it to one sub-topic. Otherwise, stop the instant a step stops surfacing on-topic material, or the confidence gate is crossed, whichever comes first; don't search further just because more results might exist. This is a relevance-based stop rule, not a substitute for the system prompt's hard per-delegation call cap — stop at whichever limit you hit first. Preserve explicit constraints (channel/time/person) through refinement. A tool error is not evidence of absence.
 
 ## 6. Answer
 
 Attribute using both real name and user_id together. Only name someone as involved if an included, on-topic fact ties them to it — not because they were active in the same channel or project. Don't claim something doesn't exist unless resolution actually failed to find it.
 
-If the question is about approval, consensus, sentiment, or who reacted to something, a message's `reactions` (returned by `conversations_replies` — emoji `name`, `count`, reacting `users`) is the evidence to cite, the same as a text fact. Skip reactions entirely for questions that aren't asking about them.
+Whenever a cited message carries `reactions` (returned by `conversations_replies` — emoji `name`, `count`, reacting `users`), include them alongside that fact every time, not only when the question is specifically about approval/consensus/sentiment — e.g. `:+1: 3 (real name (user_id), ...)`. This doesn't change when you fetch `conversations_replies` (still per step 4) — it only means: once you have reaction data for a cited message, report it, regardless of what the question was asking.
+
+Never draft this answer, or any part of it, before the tool call you just issued has actually returned a result — an anticipated result is as unacceptable as a wrong one, per the system prompt's tool_call_discipline rule.

@@ -12,11 +12,11 @@ which has already resolved which team this message belongs to and fetched
 that team's live channel whitelist — this file never re-derives either one,
 so there is exactly one place per run that decides team scope.
 
-`agent.message` text streams straight to Slack as it arrives: the caller
-supplies `on_agent_message`, called once per non-empty `agent.message` event.
-The first call posts a new Slack message and every later call updates that
-same message, so the caller's callback alone decides how streamed text
-reaches Slack — this file never calls the Slack API directly.
+Streaming `agent.message` text straight to Slack as it arrives is disabled
+(see `_drive` below) — `on_agent_message` is no longer called per event.
+Instead `handle_run` returns the last non-empty `agent.message` text once
+the session finishes, and the caller posts that single final answer itself
+— this file never calls the Slack API directly.
 """
 
 from django.utils import timezone
@@ -51,13 +51,15 @@ class AgentRunService:
 
         try:
             Session.objects.mark_running(session)
-            self._drive(
+            final_answer = self._drive(
                 client, session_id, channel_id, thread_ts, user_id, question, message_ts,
                 trigger_type, team, all_channels, on_agent_message,
             )
         finally:
             session_details = client.beta.sessions.retrieve(session_id=session_id)
             Session.objects.session_stop(session, session_details)
+
+        return final_answer
 
     def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message):
         tool_gate = AgentMcpToolGateService()
@@ -76,6 +78,7 @@ class AgentRunService:
                 }],
             })
 
+            final_answer = ''
             for event in stream:
                 reply = self._handle_event(event, tool_gate, slack_tool_service, asana_tool_service, all_channels)
                 if reply is not None:
@@ -83,16 +86,21 @@ class AgentRunService:
                 if event.type == 'agent.message':
                     text_blocks = self._text_blocks(event)
                     if text_blocks:
-                        on_agent_message('\n\n'.join(text_blocks))
+                        final_answer = '\n\n'.join(text_blocks)
+                        # Streaming to Slack per-event is disabled — only the
+                        # final answer is posted, once, by the caller.
+                        # on_agent_message(final_answer)
                 if self._is_finished(event):
                     break
+
+        return final_answer
 
     def _send(self, client, session_id, event):
         return client.beta.sessions.events.send(session_id, events=[event])
 
     def _context_message(self, channel_id, thread_ts, user_id, question, message_ts, trigger_type, all_channels, team):
         return (
-            "[Scope for this run — everything you may access]\n"
+            "[Scope for this run everything you may access]\n"
             f"Allowed Slack channels: {all_channels}\n"
             f"Allowed Asana workspace: {team.asana_workspace_gid}\n"
             f"Allowed Asana projects: {team.asana_project_gids}\n\n"

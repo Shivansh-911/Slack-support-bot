@@ -20,7 +20,11 @@ COPY . .
 ENV PORT=8000
 EXPOSE 8000
 
+# newrelic.ini itself has no secrets (license key/app name come from env
+# vars via %(env.VAR)s interpolation); safe to bake the path in.
+ENV NEW_RELIC_CONFIG_FILE=newrelic.ini
+
 # migrate on every boot, then serve. Fine for a single-service deploy;
 # move to a Railway pre-deploy command instead if you ever run >1 replica.
 CMD python manage.py migrate --noinput && \
-    gunicorn config.wsgi:application --bind 0.0.0.0:${PORT} --workers 3
+    newrelic-admin run-program gunicorn config.wsgi:application --bind 0.0.0.0:${PORT} --workers 3

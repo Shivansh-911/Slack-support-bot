@@ -109,21 +109,24 @@ class SlackEventListenerService:
         print(event)
         self._react(channel_id, message_ts, team.slack_user_token, channel_type)
 
-        stream_message_ts = None
-
-        def on_agent_message(text):
-            nonlocal stream_message_ts
-            if self._is_internal_notification(text):
-                logger.warning('Dropped leaked internal notification text instead of posting it to Slack')
-                return
-            if stream_message_ts is None:
-                stream_message_ts = self._post(channel_id, thread_ts, text, team.slack_user_token, channel_type, team.name)
-            else:
-                self._update(channel_id, stream_message_ts, text, team.slack_user_token, channel_type, team.name)
+        # Streaming updates disabled — on_agent_message is no longer called
+        # per event; only the final answer handle_run returns gets posted.
+        #
+        # stream_message_ts = None
+        #
+        # def on_agent_message(text):
+        #     nonlocal stream_message_ts
+        #     if self._is_internal_notification(text):
+        #         logger.warning('Dropped leaked internal notification text instead of posting it to Slack')
+        #         return
+        #     if stream_message_ts is None:
+        #         stream_message_ts = self._post(channel_id, thread_ts, text, team.slack_user_token, channel_type, team.name)
+        #     else:
+        #         self._update(channel_id, stream_message_ts, text, team.slack_user_token, channel_type, team.name)
 
         agent_run_service = AgentRunService()
         try:
-            agent_run_service.handle_run(
+            final_answer = agent_run_service.handle_run(
                 channel_id,
                 thread_ts,
                 slack_team_id,
@@ -133,14 +136,17 @@ class SlackEventListenerService:
                 trigger_type,
                 team,
                 all_channels,
-                on_agent_message,
+                on_agent_message=lambda text: None,
             )
         except SessionBusyError:
             self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token, channel_type, team.name)
             return
 
-        if stream_message_ts is None:
-            self._post(channel_id, thread_ts, '', team.slack_user_token, channel_type, team.name)
+        if final_answer and self._is_internal_notification(final_answer):
+            logger.warning('Dropped leaked internal notification text instead of posting it to Slack')
+            final_answer = ''
+
+        self._post(channel_id, thread_ts, final_answer or '', team.slack_user_token, channel_type, team.name)
 
         # answer = self._debug_run_summary(
             # channel_id, thread_ts, slack_team_id, user_id, question, message_ts, trigger_type, team, all_channels

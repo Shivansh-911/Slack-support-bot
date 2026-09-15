@@ -41,8 +41,9 @@ Ask:
 - Is the interpretation unambiguous?
 - Would a reasonable reader reach the same conclusion?
 - Am I filling any gap with an assumption?
+- Can I point to the literal specialist Findings text (or an already-verified memory fact) that each claim in my draft comes from — not a summary, paraphrase, or anything drafted before that response actually arrived?
 
-If the evidence does not support a confident answer, do not guess.
+If the evidence does not support a confident answer, do not guess. A claim with no literal source to point to is not evidence, however plausible it sounds — treat it exactly like Step 4's "no confident answer," even if it matches what you expected to find.
 
 A large amount of related evidence does not increase confidence if none of
 it directly answers the question.

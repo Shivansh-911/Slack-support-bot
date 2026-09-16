@@ -28,6 +28,7 @@ from agent.services.agent_session_create_service import AgentSessionCreateServic
 from agent.services.agent_mcp_tool_gate_service import AgentMcpToolGateService
 from agent.services.slack.agent_slack_custom_tool_service import AgentslackCustomToolService
 from agent.services.asana.agent_asana_custom_tool_service import AgentAsanaCustomToolService
+from agent.services.utility.agent_utility_custom_tool_service import AgentUtilityCustomToolService
 
 
 class AgentRunService:
@@ -65,6 +66,7 @@ class AgentRunService:
         tool_gate = AgentMcpToolGateService()
         slack_tool_service = AgentslackCustomToolService(team)
         asana_tool_service = AgentAsanaCustomToolService(team)
+        utility_tool_service = AgentUtilityCustomToolService()
 
         with client.beta.sessions.events.stream(session_id) as stream:
 
@@ -80,7 +82,7 @@ class AgentRunService:
 
             final_answer = ''
             for event in stream:
-                reply = self._handle_event(event, tool_gate, slack_tool_service, asana_tool_service, all_channels)
+                reply = self._handle_event(event, tool_gate, slack_tool_service, asana_tool_service, utility_tool_service, all_channels)
                 if reply is not None:
                     self._send(client, session_id, reply)
                 if event.type == 'agent.message':
@@ -139,7 +141,7 @@ class AgentRunService:
         # rather than remove it.
         return timezone.now().strftime('%Y-%m-%d %H:%M UTC (%A)')
 
-    def _handle_event(self, event, tool_gate, slack_tool_service, asana_tool_service, all_channels):
+    def _handle_event(self, event, tool_gate, slack_tool_service, asana_tool_service, utility_tool_service, all_channels):
         if event.type == 'agent.mcp_tool_use':
             return tool_gate.handle_mcp_tool_use(event, all_channels)
         elif event.type == 'agent.custom_tool_use':
@@ -147,6 +149,8 @@ class AgentRunService:
                 return asana_tool_service.handle_custom_tool_use(event)
             if slack_tool_service.handles(event.name):
                 return slack_tool_service.handle_custom_tool_use(event, all_channels)
+            if utility_tool_service.handles(event.name):
+                return utility_tool_service.handle_custom_tool_use(event)
         return None
 
     def _is_finished(self, event):

@@ -126,7 +126,7 @@ class SlackEventListenerService:
 
         agent_run_service = AgentRunService()
         try:
-            final_answer = agent_run_service.handle_run(
+            final_answer, did_react = agent_run_service.handle_run(
                 channel_id,
                 thread_ts,
                 slack_team_id,
@@ -137,6 +137,7 @@ class SlackEventListenerService:
                 team,
                 all_channels,
                 on_agent_message=lambda text: None,
+                channel_type=channel_type,
             )
         except SessionBusyError:
             self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token, channel_type, team.name)
@@ -145,6 +146,10 @@ class SlackEventListenerService:
         if final_answer and self._is_internal_notification(final_answer):
             logger.warning('Dropped leaked internal notification text instead of posting it to Slack')
             final_answer = ''
+
+        if not final_answer and did_react:
+            print("Reacted Skipping Message")
+            return
 
         self._post(channel_id, thread_ts, final_answer or '', team.slack_user_token, channel_type, team.name)
 

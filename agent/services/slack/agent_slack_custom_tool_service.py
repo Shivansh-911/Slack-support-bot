@@ -21,9 +21,19 @@ erroring out if nothing in the list was in scope. `add_reaction`: it acts
 on whatever channel/message the Slack event already told it about, not a
 retrieval target chosen by the agent, so the whitelist (which scopes
 search) doesn't apply to it.
+
+`add_reaction` also needs `channel_type` (passed in alongside `team`):
+in a DM, the team's own seat isn't a member of that DM, so a reaction
+placed there must go out under the shared bot token instead — the same
+swap `SlackEventListenerService._react`/`_post`/`_update` already make
+for every DM reply. Every other tool here stays on the team's seat token
+unconditionally, since a DM's `channel_id` never passes the whitelist
+gate above for them anyway.
 """
 
 import json
+
+from config import settings
 
 from agent.services.slack.slack_channel_search_assistant_service import SlackChannelSearchAssistantService
 from agent.services.slack.slack_conversation_history_service import SlackConversationHistoryService
@@ -41,11 +51,13 @@ from agent.services.slack.formatter.slack_channel_members_formatter import Slack
 
 
 class AgentslackCustomToolService:
-    ADD_REACTION_EMOJI = '-1::skin-tone-4'
+    ADD_REACTION_EMOJI = 'zipper_mouth_face'
     CHANNEL_GATE_EXEMPT_TOOLS = {'add_reaction'}
 
-    def __init__(self, team):
+    def __init__(self, team, channel_type=None):
         self.team = team
+        self.channel_type = channel_type
+        self.did_react = False
         self._handlers = {
             'search_whitelisted_channels': self._handle_search,
             'conversations_history': self._handle_conversations_history,
@@ -162,11 +174,15 @@ class AgentslackCustomToolService:
         return self._reply(event, result)
 
     def _handle_add_reaction(self, event, channel_mapping):
+        self.did_react = True
+        slack_user_token = (
+            settings.SLACK_BOT_TOKEN if self.channel_type == 'im' else self.team.slack_user_token
+        )
         result = SlackReactionsService().add_reaction(
             channel_id=event.input.get('channel'),
             timestamp=event.input.get('timestamp'),
             emoji_name=self.ADD_REACTION_EMOJI,
-            slack_user_token=self.team.slack_user_token,
+            slack_user_token=slack_user_token,
         )
         return self._reply(event, result)
 

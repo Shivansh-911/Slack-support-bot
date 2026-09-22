@@ -17,6 +17,13 @@ Streaming `agent.message` text straight to Slack as it arrives is disabled
 Instead `handle_run` returns the last non-empty `agent.message` text once
 the session finishes, and the caller posts that single final answer itself
 — this file never calls the Slack API directly.
+
+`handle_run` also returns `did_react`: whether the orchestrator called
+`add_reaction` this turn. The orchestrator's own instructions treat
+reacting (instead of answering) as a deliberate zero-output turn, so the
+caller uses this flag to tell that intentional silence apart from a run
+that simply failed to produce text — the two cases both leave
+`final_answer` empty, but only one of them warrants a fallback message.
 """
 
 from django.utils import timezone
@@ -34,7 +41,7 @@ from agent.services.utility.agent_utility_custom_tool_service import AgentUtilit
 class AgentRunService:
     REQUIRES_ACTION = 'requires_action'
 
-    def handle_run(self, channel_id, thread_ts, team_id, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message):
+    def handle_run(self, channel_id, thread_ts, team_id, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, channel_type=None):
         session = Session.objects.existing_session(team_id, channel_id, thread_ts)
         if session and session.status == Session.Status.RUNNING:
             raise SessionBusyError(session)
@@ -52,19 +59,19 @@ class AgentRunService:
 
         try:
             Session.objects.mark_running(session)
-            final_answer = self._drive(
+            final_answer, did_react = self._drive(
                 client, session_id, channel_id, thread_ts, user_id, question, message_ts,
-                trigger_type, team, all_channels, on_agent_message,
+                trigger_type, team, all_channels, on_agent_message, channel_type,
             )
         finally:
             session_details = client.beta.sessions.retrieve(session_id=session_id)
             Session.objects.session_stop(session, session_details)
 
-        return final_answer
+        return final_answer, did_react
 
-    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message):
+    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, channel_type=None):
         tool_gate = AgentMcpToolGateService()
-        slack_tool_service = AgentslackCustomToolService(team)
+        slack_tool_service = AgentslackCustomToolService(team, channel_type)
         asana_tool_service = AgentAsanaCustomToolService(team)
         utility_tool_service = AgentUtilityCustomToolService()
 
@@ -95,7 +102,7 @@ class AgentRunService:
                 if self._is_finished(event):
                     break
 
-        return final_answer
+        return final_answer, slack_tool_service.did_react
 
     def _send(self, client, session_id, event):
         return client.beta.sessions.events.send(session_id, events=[event])

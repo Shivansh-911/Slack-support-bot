@@ -41,7 +41,7 @@ from agent.services.utility.agent_utility_custom_tool_service import AgentUtilit
 class AgentRunService:
     REQUIRES_ACTION = 'requires_action'
 
-    def handle_run(self, channel_id, thread_ts, team_id, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, channel_type=None):
+    def handle_run(self, channel_id, thread_ts, team_id, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, channel_type=None, context=None):
         session = Session.objects.existing_session(team_id, channel_id, thread_ts)
         if session and session.status == Session.Status.RUNNING:
             raise SessionBusyError(session)
@@ -61,7 +61,7 @@ class AgentRunService:
             Session.objects.mark_running(session)
             final_answer, did_react = self._drive(
                 client, session_id, channel_id, thread_ts, user_id, question, message_ts,
-                trigger_type, team, all_channels, on_agent_message, channel_type,
+                trigger_type, team, all_channels, on_agent_message, channel_type, context,
             )
         finally:
             session_details = client.beta.sessions.retrieve(session_id=session_id)
@@ -69,7 +69,7 @@ class AgentRunService:
 
         return final_answer, did_react
 
-    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, channel_type=None):
+    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, channel_type=None, context=None):
         tool_gate = AgentMcpToolGateService()
         slack_tool_service = AgentslackCustomToolService(team, channel_type)
         asana_tool_service = AgentAsanaCustomToolService(team)
@@ -82,7 +82,7 @@ class AgentRunService:
                 "content": [{
                     "type": "text",
                     "text": self._context_message(
-                        channel_id, thread_ts, user_id, question, message_ts, trigger_type, all_channels, team
+                        channel_id, thread_ts, user_id, question, message_ts, trigger_type, all_channels, team, context
                     ),
                 }],
             })
@@ -107,7 +107,8 @@ class AgentRunService:
     def _send(self, client, session_id, event):
         return client.beta.sessions.events.send(session_id, events=[event])
 
-    def _context_message(self, channel_id, thread_ts, user_id, question, message_ts, trigger_type, all_channels, team):
+    def _context_message(self, channel_id, thread_ts, user_id, question, message_ts, trigger_type, all_channels, team, context=None):
+        context_section = f"[Context]\n{context}\n\n" if context else ''
         return (
             "[Scope for this run everything you may access]\n"
             f"Allowed Slack channels: {all_channels}\n"
@@ -125,6 +126,7 @@ class AgentRunService:
             "any freshness cutoff you pass to a specialist)\n\n"
             "Don't restrict your search to the channel above unless the question "
             "itself names that channel (or says \"this channel,\" \"here,\" etc.).\n\n"
+            f"{context_section}"
             "[Question]\n"
             f"{question}\n\n"
 

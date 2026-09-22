@@ -39,6 +39,7 @@ from slack.utils.slack_markdown_formatter import SlackMarkdownFormatter
 from agent.exceptions import SessionBusyError
 from agent.services.agent_run import AgentRunService
 from agent.services.slack.slack_channel_service import SlackChannelService
+from agent.services.slack.slack_conversation_replies_service import SlackConversationRepliesService
 from slack.models.teams import Teams
 
 
@@ -51,6 +52,13 @@ class SlackEventListenerService:
     EMPTY_ANSWER_MESSAGE = "I didn't get a text response for that — could you rephrase or ask again?"
     TRIGGER_MENTION = 'mention'
     TRIGGER_MESSAGE = 'message'
+    OPENING_MESSAGE_CONTEXT = (
+        'This mention is the opening message of a new thread — there is no prior thread history.'
+    )
+    FOLLOWUP_CONTEXT = (
+        'This message is a followup within an ongoing session/thread, not a fresh mention — '
+        "Your session already holds the prior conversation. use it to resolve things"
+    )
     CHANNEL_GATE_EXEMPT_CHANNELS = {'C0BJV4LF6N7', 'C0BJN116WQ5', 'C0BM44A3YCW'}
     INTERNAL_NOTIFICATION_MARKERS = (
         '<agent-notification', 'agent_message_received', '</agent-notification>', '</parameter>',
@@ -93,12 +101,14 @@ class SlackEventListenerService:
         if team is not None:
             trigger_type = self.TRIGGER_MENTION
             question = self._strip_mention(text, team.slack_user_id)
+            context = self.get_context(channel_id, thread_ts, message_ts)
         else:
             team = self._resolve_followup_team(slack_team_id, channel_id, thread_ts)
             if team is None:
                 return
             trigger_type = self.TRIGGER_MESSAGE
             question = text
+            context = self.FOLLOWUP_CONTEXT
  
         all_channels = SlackChannelService()._fetch_id_to_name(team.slack_user_token)
         # if channel_type == 'im' or channel_id in self.CHANNEL_GATE_EXEMPT_CHANNELS:
@@ -138,6 +148,7 @@ class SlackEventListenerService:
                 all_channels,
                 on_agent_message=lambda text: None,
                 channel_type=channel_type,
+                context=context,
             )
         except SessionBusyError:
             self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token, channel_type, team.name)
@@ -186,6 +197,39 @@ class SlackEventListenerService:
         if not session:
             return None
         return Teams.objects.fetch_team_by_name(session.name)
+
+    def get_context(self, channel_id, thread_ts, message_ts):
+        if thread_ts == message_ts:
+            return self.OPENING_MESSAGE_CONTEXT
+
+        replies_service = SlackConversationRepliesService()
+        messages = []
+        cursor = ''
+        while True:
+            result = replies_service.replies(
+                channel=channel_id,
+                thread_ts=thread_ts,
+                include_activity_messages=False,
+                cursor=cursor,
+                oldest=None,
+                latest=None,
+                slack_user_token=settings.SLACK_BOT_TOKEN,
+            )
+            if 'error' in result:
+                logger.warning('Could not fetch thread context: %s', result['error'])
+                return None
+            messages.extend(result['messages'])
+            if not result['has_more']:
+                break
+            cursor = result['next_cursor']
+
+        prior_messages = [message for message in messages if float(message['ts']) < float(message_ts)]
+        if not prior_messages:
+            return None
+
+        return 'Prior messages in this thread before the current message:\n' + '\n'.join(
+            f"{message['user']} ({message['ts']}): {message['text']}" for message in prior_messages
+        )
 
     def acknowledge_unhandled_event(self, ack):
         ack()

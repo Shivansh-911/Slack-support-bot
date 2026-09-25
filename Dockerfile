@@ -20,8 +20,9 @@ COPY . .
 ENV PORT=8000
 EXPOSE 8000
 
-# newrelic.ini itself has no secrets (license key/app name come from env
-# vars via %(env.VAR)s interpolation); safe to bake the path in.
+# newrelic.ini itself has no secrets (the agent reads the license key/app
+# name from the NEW_RELIC_LICENSE_KEY / NEW_RELIC_APP_NAME env vars); safe
+# to bake the path in.
 ENV NEW_RELIC_CONFIG_FILE=newrelic.ini
 
 # migrate on every boot, then serve. Fine for a single-service deploy;

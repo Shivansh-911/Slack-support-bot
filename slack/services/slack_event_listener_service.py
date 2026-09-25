@@ -40,6 +40,7 @@ from agent.exceptions import SessionBusyError
 from agent.services.agent_run import AgentRunService
 from agent.services.slack.slack_channel_service import SlackChannelService
 from agent.services.slack.slack_conversation_replies_service import SlackConversationRepliesService
+from agent.services.monitoring.slack_question_monitor_service import SlackQuestionMonitorService
 from slack.models.teams import Teams
 
 
@@ -94,7 +95,10 @@ class SlackEventListenerService:
 
         
 
+        question_monitor = SlackQuestionMonitorService()
+
         if user_id in Teams.objects.get_team_ids():
+            question_monitor.ignore()
             return
 
         team = self._resolve_mention(text)
@@ -105,12 +109,23 @@ class SlackEventListenerService:
         else:
             team = self._resolve_followup_team(slack_team_id, channel_id, thread_ts)
             if team is None:
+                question_monitor.ignore()
                 return
             trigger_type = self.TRIGGER_MESSAGE
             question = text
             context = self.FOLLOWUP_CONTEXT
  
         all_channels = SlackChannelService()._fetch_id_to_name(team.slack_user_token)
+        question_monitor.add_request_fields(
+            slack_team_id=slack_team_id,
+            channel_id=channel_id,
+            user_id=user_id,
+            thread_ts=thread_ts,
+            message_ts=message_ts,
+            team=team,
+            trigger_type=trigger_type,
+            question=question,
+        )
         # if channel_type == 'im' or channel_id in self.CHANNEL_GATE_EXEMPT_CHANNELS:
         #     pass
         # else:
@@ -149,10 +164,15 @@ class SlackEventListenerService:
                 on_agent_message=lambda text: None,
                 channel_type=channel_type,
                 context=context,
+                question_monitor=question_monitor,
             )
         except SessionBusyError:
             self._post(channel_id, thread_ts, self.BUSY_MESSAGE, team.slack_user_token, channel_type, team.name)
+            question_monitor.record(question_monitor.OUTCOME_BUSY, message_ts)
             return
+        except Exception:
+            question_monitor.record(question_monitor.OUTCOME_ERROR, message_ts)
+            raise
 
         if final_answer and self._is_internal_notification(final_answer):
             logger.warning('Dropped leaked internal notification text instead of posting it to Slack')
@@ -160,9 +180,14 @@ class SlackEventListenerService:
 
         if not final_answer and did_react:
             print("Reacted Skipping Message")
+            question_monitor.record(question_monitor.OUTCOME_REACTED_ONLY, message_ts)
             return
 
         self._post(channel_id, thread_ts, final_answer or '', team.slack_user_token, channel_type, team.name)
+        question_monitor.record(
+            question_monitor.OUTCOME_ANSWERED if final_answer else question_monitor.OUTCOME_EMPTY_ANSWER,
+            message_ts,
+        )
 
         # answer = self._debug_run_summary(
             # channel_id, thread_ts, slack_team_id, user_id, question, message_ts, trigger_type, team, all_channels
@@ -265,6 +290,7 @@ class SlackEventListenerService:
             return response.get('ts')
         except SlackApiError as error:
             logger.warning('Could not post message: %s', error)
+            SlackQuestionMonitorService().notice_error()
             return None
 
     def _update(self, channel_id, ts, text, slack_token, channel_type, name):

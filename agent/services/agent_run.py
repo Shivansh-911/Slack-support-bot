@@ -24,6 +24,14 @@ reacting (instead of answering) as a deliberate zero-output turn, so the
 caller uses this flag to tell that intentional silence apart from a run
 that simply failed to produce text — the two cases both leave
 `final_answer` empty, but only one of them warrants a fallback message.
+
+New Relic monitoring hooks in at two points, both in
+`agent/services/monitoring/`: the caller's `SlackQuestionMonitorService`
+collects the CMA session used, what this turn cost (session total now
+minus `Session.usage` from before the run) and the tool totals for the
+question's `SlackQuestion` event, and every tool event in `_drive` runs
+through `CmaToolCallMonitorService`, which times it and records one
+`CmaToolCall` event per call.
 """
 
 from django.utils import timezone
@@ -36,12 +44,15 @@ from agent.services.agent_mcp_tool_gate_service import AgentMcpToolGateService
 from agent.services.slack.agent_slack_custom_tool_service import AgentslackCustomToolService
 from agent.services.asana.agent_asana_custom_tool_service import AgentAsanaCustomToolService
 from agent.services.utility.agent_utility_custom_tool_service import AgentUtilityCustomToolService
+from agent.services.monitoring.slack_question_monitor_service import SlackQuestionMonitorService
+from agent.services.monitoring.cma_tool_call_monitor_service import CmaToolCallMonitorService
 
 
 class AgentRunService:
     REQUIRES_ACTION = 'requires_action'
 
-    def handle_run(self, channel_id, thread_ts, team_id, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, channel_type=None, context=None):
+    def handle_run(self, channel_id, thread_ts, team_id, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, channel_type=None, context=None, question_monitor=None):
+        question_monitor = question_monitor or SlackQuestionMonitorService()
         session = Session.objects.existing_session(team_id, channel_id, thread_ts)
         if session and session.status == Session.Status.RUNNING:
             raise SessionBusyError(session)
@@ -53,27 +64,39 @@ class AgentRunService:
         if session and session.cma_session_id:
             session_id = agent_session_create_service._reuse(client, session.cma_session_id)
 
-        if session_id is None:
+        session_reused = session_id is not None
+        if not session_reused:
             session_id = agent_session_create_service._create(client, channel_id, thread_ts, team)
             session = Session.objects.create(team_id, channel_id, thread_ts, session_id, team.name)
+
+        question_monitor.add_session_fields(session_id, session_reused, team.cma_agent_id)
+        tool_monitor = CmaToolCallMonitorService(session_id, team, channel_id, thread_ts, message_ts, user_id)
+        previous_session_cost = session.usage
 
         try:
             Session.objects.mark_running(session)
             final_answer, did_react = self._drive(
                 client, session_id, channel_id, thread_ts, user_id, question, message_ts,
-                trigger_type, team, all_channels, on_agent_message, channel_type, context,
+                trigger_type, team, all_channels, on_agent_message, tool_monitor, channel_type, context,
             )
         finally:
             session_details = client.beta.sessions.retrieve(session_id=session_id)
             Session.objects.session_stop(session, session_details)
+            question_monitor.add_cost_fields(previous_session_cost, session_details)
+            question_monitor.add_tool_counts(tool_monitor.tool_call_count, tool_monitor.tool_error_count)
 
         return final_answer, did_react
 
-    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, channel_type=None, context=None):
+    def _drive(self, client, session_id, channel_id, thread_ts, user_id, question, message_ts, trigger_type, team, all_channels, on_agent_message, tool_monitor, channel_type=None, context=None):
         tool_gate = AgentMcpToolGateService()
         slack_tool_service = AgentslackCustomToolService(team, channel_type)
         asana_tool_service = AgentAsanaCustomToolService(team)
         utility_tool_service = AgentUtilityCustomToolService()
+        tool_monitor.register_tool_services({
+            'slack': slack_tool_service,
+            'asana': asana_tool_service,
+            'internal': utility_tool_service,
+        })
 
         with client.beta.sessions.events.stream(session_id) as stream:
 
@@ -89,7 +112,11 @@ class AgentRunService:
 
             final_answer = ''
             for event in stream:
-                reply = self._handle_event(event, tool_gate, slack_tool_service, asana_tool_service, utility_tool_service, all_channels)
+                tool_monitor.observe(event)
+                reply = tool_monitor.track(
+                    event,
+                    lambda: self._handle_event(event, tool_gate, slack_tool_service, asana_tool_service, utility_tool_service, all_channels),
+                )
                 if reply is not None:
                     self._send(client, session_id, reply)
                 if event.type == 'agent.message':

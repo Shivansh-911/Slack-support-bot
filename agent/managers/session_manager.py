@@ -7,12 +7,12 @@ from django.utils import timezone
 class SessionManager(models.Manager):
 
     def existing_session(self, team_id, channel_id, thread_ts):
-        """Returns the session backing this Slack thread, if one exists."""
+        """Returns the oldest session backing this Slack thread, if one exists."""
         return self.filter(
             team_id=team_id,
             channel_id=channel_id,
             thread_ts=thread_ts,
-        ).first()
+        ).order_by('created_at').first()
 
     def create(self, team_id, channel_id, thread_ts, cma_session_id, name=''):
         return super().create(
